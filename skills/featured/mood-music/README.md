@@ -1,7 +1,7 @@
 Mood Music Skill
 ============
 
-skill for gallery to generate music based on your mood using Loudly API. 
+Skill for Husk to generate music based on your mood using Loudly API. 
 
 Loudly API key can be obtained by registrating an account with \
 https://www.loudly.com then go to https://www.loudly.com/developers/apps
