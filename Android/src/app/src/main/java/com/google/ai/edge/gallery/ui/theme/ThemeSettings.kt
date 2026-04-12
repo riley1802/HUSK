@@ -19,6 +19,8 @@ package com.google.ai.edge.gallery.ui.theme
 import androidx.compose.runtime.mutableStateOf
 import com.google.ai.edge.gallery.proto.Theme
 
+// Husk is dark-only. The override stays a MutableState so existing call sites that
+// observe it still recompose correctly, but its value is fixed to THEME_DARK.
 object ThemeSettings {
-  val themeOverride = mutableStateOf<Theme>(Theme.THEME_AUTO)
+  val themeOverride = mutableStateOf<Theme>(Theme.THEME_DARK)
 }

@@ -72,14 +72,11 @@ fun GemmaTermsOfUseDialog(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
           Text(
             buildAnnotatedString {
-              append("Gemma models on the Google AI Edge Gallery app are governed by the ")
               append(
-                buildTrackableUrlAnnotatedString(
-                  url = "https://ai.google.dev/gemma/terms",
-                  linkText = "Gemma Terms of Service",
-                )
+                "Models loaded into Husk are governed by their original publisher's license. " +
+                  "Please review the license for the model you are about to download and " +
+                  "ensure you agree before continuing."
               )
-              append(". Please review these terms and ensure you agree before continuing.")
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

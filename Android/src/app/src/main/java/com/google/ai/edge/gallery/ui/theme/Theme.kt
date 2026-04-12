@@ -18,10 +18,8 @@ package com.google.ai.edge.gallery.ui.theme
 
 import android.app.Activity
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -34,48 +32,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.google.ai.edge.gallery.proto.Theme
 
-private val lightScheme =
-  lightColorScheme(
-    primary = primaryLight,
-    onPrimary = onPrimaryLight,
-    primaryContainer = primaryContainerLight,
-    onPrimaryContainer = onPrimaryContainerLight,
-    secondary = secondaryLight,
-    onSecondary = onSecondaryLight,
-    secondaryContainer = secondaryContainerLight,
-    onSecondaryContainer = onSecondaryContainerLight,
-    tertiary = tertiaryLight,
-    onTertiary = onTertiaryLight,
-    tertiaryContainer = tertiaryContainerLight,
-    onTertiaryContainer = onTertiaryContainerLight,
-    error = errorLight,
-    onError = onErrorLight,
-    errorContainer = errorContainerLight,
-    onErrorContainer = onErrorContainerLight,
-    background = backgroundLight,
-    onBackground = onBackgroundLight,
-    surface = surfaceLight,
-    onSurface = onSurfaceLight,
-    surfaceVariant = surfaceVariantLight,
-    onSurfaceVariant = onSurfaceVariantLight,
-    outline = outlineLight,
-    outlineVariant = outlineVariantLight,
-    scrim = scrimLight,
-    inverseSurface = inverseSurfaceLight,
-    inverseOnSurface = inverseOnSurfaceLight,
-    inversePrimary = inversePrimaryLight,
-    surfaceDim = surfaceDimLight,
-    surfaceBright = surfaceBrightLight,
-    surfaceContainerLowest = surfaceContainerLowestLight,
-    surfaceContainerLow = surfaceContainerLowLight,
-    surfaceContainer = surfaceContainerLight,
-    surfaceContainerHigh = surfaceContainerHighLight,
-    surfaceContainerHighest = surfaceContainerHighestLight,
-  )
-
-private val darkScheme =
+private val huskColorScheme =
   darkColorScheme(
     primary = primaryDark,
     onPrimary = onPrimaryDark,
@@ -144,152 +102,55 @@ data class CustomColors(
 
 val LocalCustomColors = staticCompositionLocalOf { CustomColors() }
 
-val lightCustomColors =
-  CustomColors(
-    appTitleGradientColors = listOf(Color(0xFF85B1F8), Color(0xFF3174F1)),
-    tabHeaderBgColor = Color(0xFF3174F1),
-    taskCardBgColor = surfaceContainerLowestLight,
-    taskBgColors =
-      listOf(
-        // red
-        Color(0xFFFFF5F5),
-        // green
-        Color(0xFFF4FBF6),
-        // blue
-        Color(0xFFF1F6FE),
-        // yellow
-        Color(0xFFFFFBF0),
-      ),
-    taskBgGradientColors =
-      listOf(
-        // red
-        listOf(Color(0xFFE25F57), Color(0xFFDB372D)),
-        // green
-        listOf(Color(0xFF41A15F), Color(0xFF128937)),
-        // blue
-        listOf(Color(0xFF669DF6), Color(0xFF3174F1)),
-        // yellow
-        listOf(Color(0xFFFDD45D), Color(0xFFCAA12A)),
-      ),
-    taskIconColors =
-      listOf(
-        // red.
-        Color(0xFFDB372D),
-        // green
-        Color(0xFF128937),
-        // blue
-        Color(0xFF3174F1),
-        // yellow
-        Color(0xFFCAA12A),
-      ),
-    taskIconShapeBgColor = Color.White,
-    homeBottomGradient = listOf(Color(0x00F8F9FF), Color(0xffFFEFC9)),
-    agentBubbleBgColor = Color(0xFFe9eef6),
-    userBubbleBgColor = Color(0xFF32628D),
-    linkColor = Color(0xFF32628D),
-    successColor = Color(0xff3d860b),
-    recordButtonBgColor = Color(0xFFEE675C),
-    waveFormBgColor = Color(0xFFaaaaaa),
-    modelInfoIconColor = Color(0xFFCCCCCC),
-    warningContainerColor = Color(0xfffef7e0),
-    warningTextColor = Color(0xffe37400),
-    errorContainerColor = Color(0xfffce8e6),
-    errorTextColor = Color(0xffd93025),
-    newFeatureContainerColor = Color(0xFFEEDCFE),
-    newFeatureTextColor = Color(0xFF400B84),
-    bgStarColor = Color(0x3A669AF5),
-    promoBannerBgBrush =
-      Brush.linearGradient(
-        colorStops =
-          arrayOf(
-            0.0f to Color(0x42ACB7FF),
-            0.6154f to Color(0x422D96FF),
-            1.0f to Color(0x423C6BFF),
-          ),
-        start = Offset(0f, 0f),
-        end = Offset(0f, Float.POSITIVE_INFINITY),
-      ),
-    promoBannerIconBgBrush =
-      Brush.linearGradient(
-        colorStops =
-          arrayOf(
-            0.2442f to Color(0x3B446EFF),
-            0.4296f to Color(0x3B2E96FF),
-            0.6651f to Color(0x3BB1C5FF),
-          ),
-        start = Offset(0f, 1f),
-        end = Offset(1f, 0f),
-      ),
+// All five "task" slots collapse to the same monochrome surface + sand accent. Existing
+// per-task indexing (red/green/blue/yellow lookups in legacy task cards) keeps working,
+// it just resolves to the same Husk values regardless of index.
+private val huskTaskSurfaceList =
+  listOf(huskSurface, huskSurface, huskSurface, huskSurface, huskSurface)
+private val huskTaskAccentList =
+  listOf(huskAccent, huskAccent, huskAccent, huskAccent, huskAccent)
+private val huskTaskGradientList =
+  listOf(
+    listOf(huskAccent, huskAccentMuted),
+    listOf(huskAccent, huskAccentMuted),
+    listOf(huskAccent, huskAccentMuted),
+    listOf(huskAccent, huskAccentMuted),
+    listOf(huskAccent, huskAccentMuted),
   )
 
-val darkCustomColors =
+val huskCustomColors =
   CustomColors(
-    appTitleGradientColors = listOf(Color(0xFF85B1F8), Color(0xFF3174F1)),
-    tabHeaderBgColor = Color(0xFF3174F1),
-    taskCardBgColor = surfaceContainerHighDark,
-    taskBgColors =
-      listOf(
-        // red
-        Color(0xFF181210),
-        // green
-        Color(0xFF131711),
-        // blue
-        Color(0xFF191924),
-        // yellow
-        Color(0xFF1A1813),
-      ),
-    taskBgGradientColors =
-      listOf(
-        // red
-        listOf(Color(0xFFE25F57), Color(0xFFDB372D)),
-        // green
-        listOf(Color(0xFF41A15F), Color(0xFF128937)),
-        // blue
-        listOf(Color(0xFF669DF6), Color(0xFF3174F1)),
-        // yellow
-        listOf(Color(0xFFFDD45D), Color(0xFFCAA12A)),
-      ),
-    taskIconColors =
-      listOf(
-        // red.
-        Color(0xFFE25F57),
-        // green
-        Color(0xFF41A15F),
-        // blue
-        Color(0xFF669DF6),
-        // yellow
-        Color(0xFFCAA12A),
-      ),
-    taskIconShapeBgColor = Color(0xFF202124),
-    homeBottomGradient = listOf(Color(0x00F8F9FF), Color(0x1AF6AD01)),
-    agentBubbleBgColor = Color(0xFF1b1c1d),
-    userBubbleBgColor = Color(0xFF1f3760),
-    linkColor = Color(0xFF9DCAFC),
-    successColor = Color(0xFFA1CE83),
-    recordButtonBgColor = Color(0xFFEE675C),
-    waveFormBgColor = Color(0xFFaaaaaa),
-    modelInfoIconColor = Color(0xFFCCCCCC),
-    warningContainerColor = Color(0xff554c33),
-    warningTextColor = Color(0xfffcc934),
-    errorContainerColor = Color(0xff523a3b),
-    errorTextColor = Color(0xffee675c),
-    newFeatureContainerColor = Color(0xFFEEDCFE),
-    newFeatureTextColor = Color(0xFF400B84),
-    bgStarColor = Color(0x19346BF0),
+    appTitleGradientColors = listOf(huskAccent, huskAccent),
+    tabHeaderBgColor = huskSurfaceHigh,
+    taskCardBgColor = huskSurface,
+    taskBgColors = huskTaskSurfaceList,
+    taskBgGradientColors = huskTaskGradientList,
+    taskIconColors = huskTaskAccentList,
+    taskIconShapeBgColor = huskSurfaceHigh,
+    homeBottomGradient = listOf(Color.Transparent, huskBackground),
+    agentBubbleBgColor = huskSurfaceHigh,
+    userBubbleBgColor = huskAccentMuted,
+    linkColor = huskAccent,
+    successColor = huskSuccess,
+    recordButtonBgColor = huskAccent,
+    waveFormBgColor = huskTextSecondary,
+    modelInfoIconColor = huskTextSecondary,
+    warningContainerColor = huskSurfaceHigh,
+    warningTextColor = huskWarning,
+    errorContainerColor = huskSurfaceHigh,
+    errorTextColor = huskError,
+    newFeatureContainerColor = huskSurfaceHigh,
+    newFeatureTextColor = huskAccent,
+    bgStarColor = Color(0x1AD6C9A8),
     promoBannerBgBrush =
       Brush.linearGradient(
-        colorStops = arrayOf(0.0f to Color(0x82183570), 0.8077f to Color(0x820A122D)),
+        colors = listOf(huskSurfaceHigh, huskSurface),
         start = Offset(0f, 0f),
         end = Offset(0f, Float.POSITIVE_INFINITY),
       ),
     promoBannerIconBgBrush =
       Brush.linearGradient(
-        colorStops =
-          arrayOf(
-            0.2442f to Color(0x6F0F41F8),
-            0.4296f to Color(0x6F1685F8),
-            0.6651f to Color(0x6F809EF3),
-          ),
+        colors = listOf(huskAccent, huskAccentMuted),
         start = Offset(0f, 1f),
         end = Offset(1f, 0f),
       ),
@@ -299,11 +160,10 @@ val MaterialTheme.customColors: CustomColors
   @Composable @ReadOnlyComposable get() = LocalCustomColors.current
 
 /**
- * Controls the color of the phone's status bar icons based on whether the app is using a dark
- * theme.
+ * Forces the system status bar icons to render in light mode (because Husk is always dark).
  */
 @Composable
-fun StatusBarColorController(useDarkTheme: Boolean) {
+fun StatusBarColorController() {
   val view = LocalView.current
   val currentWindow = (view.context as? Activity)?.window
 
@@ -311,37 +171,25 @@ fun StatusBarColorController(useDarkTheme: Boolean) {
     SideEffect {
       WindowCompat.setDecorFitsSystemWindows(currentWindow, false)
       val controller = WindowCompat.getInsetsController(currentWindow, view)
-      controller.isAppearanceLightStatusBars = !useDarkTheme // Set to true for light icons
+      controller.isAppearanceLightStatusBars = false
     }
   }
 }
 
 @Composable
 fun GalleryTheme(content: @Composable () -> Unit) {
-  val themeOverride = ThemeSettings.themeOverride
-  val darkTheme: Boolean =
-    (isSystemInDarkTheme() || themeOverride.value == Theme.THEME_DARK) &&
-      themeOverride.value != Theme.THEME_LIGHT
   val view = LocalView.current
 
-  StatusBarColorController(useDarkTheme = darkTheme)
+  StatusBarColorController()
 
-  val colorScheme =
-    when {
-      darkTheme -> darkScheme
-      else -> lightScheme
-    }
-
-  val customColorsPalette = if (darkTheme) darkCustomColors else lightCustomColors
-
-  CompositionLocalProvider(LocalCustomColors provides customColorsPalette) {
-    MaterialTheme(colorScheme = colorScheme, typography = AppTypography, content = content)
+  CompositionLocalProvider(LocalCustomColors provides huskCustomColors) {
+    MaterialTheme(colorScheme = huskColorScheme, typography = AppTypography, content = content)
   }
 
-  // Make sure the navigation bar stays transparent on manual theme changes.
-  LaunchedEffect(darkTheme) {
+  // Make sure the navigation bar stays transparent — Husk is always dark, but the system
+  // navigation-bar contrast enforcement can otherwise wash out our background.
+  LaunchedEffect(Unit) {
     val window = (view.context as Activity).window
-
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       window.isNavigationBarContrastEnforced = false
     }
