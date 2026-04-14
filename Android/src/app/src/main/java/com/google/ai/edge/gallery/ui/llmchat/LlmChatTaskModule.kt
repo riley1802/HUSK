@@ -36,6 +36,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeScreen
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeViewModel
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -308,8 +310,9 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
   @Composable
   override fun MainScreen(data: Any) {
     val myData = data as CustomTaskDataForBuiltinTask
-    LlmAskAudioScreen(
-      modelManagerViewModel = myData.modelManagerViewModel,
+    val audioScribeViewModel: AudioScribeViewModel = hiltViewModel()
+    AudioScribeScreen(
+      viewModel = audioScribeViewModel,
       navigateUp = myData.onNavUp,
     )
   }
