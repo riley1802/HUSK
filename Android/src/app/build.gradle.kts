@@ -86,6 +86,8 @@ dependencies {
   implementation(libs.kotlin.reflect)
   implementation(libs.material.icon.extended)
   implementation(libs.androidx.work.runtime)
+  implementation(libs.androidx.hilt.work)
+  ksp(libs.androidx.hilt.compiler)
   implementation(libs.androidx.datastore)
   implementation(libs.com.google.code.gson)
   implementation(libs.androidx.lifecycle.process)
