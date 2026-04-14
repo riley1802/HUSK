@@ -23,6 +23,8 @@ import com.google.ai.edge.gallery.proto.BenchmarkResults
 import com.google.ai.edge.gallery.proto.Cutout
 import com.google.ai.edge.gallery.proto.CutoutCollection
 import com.google.ai.edge.gallery.proto.ImportedModel
+import com.google.ai.edge.gallery.proto.ChatDensity
+import com.google.ai.edge.gallery.proto.FontScale
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.Skill
 import com.google.ai.edge.gallery.proto.Skills
@@ -109,6 +111,20 @@ interface DataStoreRepository {
 
   /** Returns whether a promo with the specified ID has been viewed. */
   fun hasViewedPromo(promoId: String): Boolean
+
+  // Appearance preferences.
+  fun saveAmoledMode(enabled: Boolean)
+  fun readAmoledMode(): Boolean
+  fun saveAccentColor(argb: Int)
+  fun readAccentColor(): Int
+  fun saveFontScale(scale: FontScale)
+  fun readFontScale(): FontScale
+  fun saveChatDensity(density: ChatDensity)
+  fun readChatDensity(): ChatDensity
+
+  // RAG settings (in-memory until proto schema update).
+  fun getRagAutoRetrieve(): Boolean
+  fun setRagAutoRetrieve(enabled: Boolean)
 }
 
 /** Repository for managing data using Proto DataStore. */
@@ -432,5 +448,56 @@ class DefaultDataStoreRepository(
       val settings = dataStore.data.first()
       settings.viewedPromoIdList.contains(promoId)
     }
+  }
+
+  override fun saveAmoledMode(enabled: Boolean) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setAmoledMode(enabled).build() }
+    }
+  }
+
+  override fun readAmoledMode(): Boolean {
+    return runBlocking { dataStore.data.first().amoledMode }
+  }
+
+  override fun saveAccentColor(argb: Int) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setAccentColorArgb(argb).build() }
+    }
+  }
+
+  override fun readAccentColor(): Int {
+    return runBlocking { dataStore.data.first().accentColorArgb }
+  }
+
+  override fun saveFontScale(scale: FontScale) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setFontScale(scale).build() }
+    }
+  }
+
+  override fun readFontScale(): FontScale {
+    val raw = runBlocking { dataStore.data.first().fontScale }
+    return if (raw == FontScale.FONT_SCALE_UNSPECIFIED) FontScale.FONT_SCALE_DEFAULT else raw
+  }
+
+  override fun saveChatDensity(density: ChatDensity) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setChatDensity(density).build() }
+    }
+  }
+
+  override fun readChatDensity(): ChatDensity {
+    val raw = runBlocking { dataStore.data.first().chatDensity }
+    return if (raw == ChatDensity.CHAT_DENSITY_UNSPECIFIED) ChatDensity.CHAT_DENSITY_COMFORTABLE else raw
+  }
+
+  // RAG settings — stored in-memory for now. Will be persisted via proto in a future update.
+  private var ragAutoRetrieve: Boolean = true
+
+  override fun getRagAutoRetrieve(): Boolean = ragAutoRetrieve
+
+  override fun setRagAutoRetrieve(enabled: Boolean) {
+    ragAutoRetrieve = enabled
   }
 }
