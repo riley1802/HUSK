@@ -32,11 +32,11 @@ class RagManager @Inject constructor(
 ) {
 	companion object {
 		private const val TAG = "RagManager"
-		private const val CHUNK_SIZE_CHARS = 2000 // ~512 tokens
-		private const val CHUNK_OVERLAP_CHARS = 200 // ~50 tokens
-		private const val DEFAULT_TOP_K = 5
-		private const val DEFAULT_THRESHOLD = 0.3f
-		private const val MAX_RAG_CONTEXT_CHARS = 4000 // ~1000 tokens
+		private const val CHUNK_SIZE_CHARS = 600 // ~150 tokens — small for precision
+		private const val CHUNK_OVERLAP_CHARS = 100 // ~25 tokens overlap
+		private const val DEFAULT_TOP_K = 8
+		private const val DEFAULT_THRESHOLD = 0.15f // lower threshold to catch more results
+		private const val MAX_RAG_CONTEXT_CHARS = 6000 // ~1500 tokens — more context budget
 		private const val VECTOR_DB_NAME = "husk_rag_vectors.db"
 	}
 
@@ -244,9 +244,11 @@ class RagManager @Inject constructor(
 	 */
 	fun formatContextBlock(results: List<ChunkResult>): String {
 		if (results.isEmpty()) return ""
-		val sb = StringBuilder("Relevant knowledge from user's documents:\n\n")
-		for (result in results) {
-			sb.appendLine("[Source: ${result.documentName}, relevance: ${"%.0f".format(result.relevanceScore * 100)}%]")
+		val sb = StringBuilder()
+		sb.appendLine("IMPORTANT: The following context was retrieved from the user's uploaded documents. You MUST use this information to answer the user's question. Base your response on these sources and cite them.")
+		sb.appendLine()
+		for ((i, result) in results.withIndex()) {
+			sb.appendLine("[Source ${i + 1}: ${result.documentName}]")
 			sb.appendLine(result.chunkContent)
 			sb.appendLine()
 		}
