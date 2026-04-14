@@ -25,7 +25,7 @@ class EmbeddingModelManager @Inject constructor() {
 
 	companion object {
 		private const val TAG = "EmbeddingModelManager"
-		const val GECKO_DIMENSIONS = 256
+		const val GECKO_DIMENSIONS = 768
 		const val GECKO_MODEL_FILENAME = "gecko_embedding.tflite"
 	}
 
