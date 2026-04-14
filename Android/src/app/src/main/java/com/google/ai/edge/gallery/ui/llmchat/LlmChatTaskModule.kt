@@ -46,6 +46,9 @@ import com.google.ai.edge.gallery.data.mcp.McpToolBridge
 import com.google.ai.edge.gallery.data.memory.HotMemoryStore
 import com.google.ai.edge.gallery.data.memory.MemoryRepository
 import com.google.ai.edge.gallery.data.memory.MemoryToolSet
+import com.google.ai.edge.gallery.data.rag.RagDao
+import com.google.ai.edge.gallery.data.rag.RagManager
+import com.google.ai.edge.gallery.data.rag.RagToolSet
 import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.theme.emptyStateContent
 import com.google.ai.edge.gallery.ui.theme.emptyStateTitle
@@ -67,8 +70,11 @@ class LlmChatTask(
   private val hotMemoryStore: HotMemoryStore,
   private val memoryRepository: MemoryRepository,
   private val mcpToolBridge: McpToolBridge,
+  private val ragManager: RagManager,
+  private val ragDao: RagDao,
 ) : CustomTask {
   private val memoryToolSet = MemoryToolSet(hotMemoryStore, memoryRepository)
+  private val ragToolSet = RagToolSet(ragManager, ragDao)
 
   override val task: Task =
     Task(
@@ -97,6 +103,8 @@ class LlmChatTask(
       appendLine("- When you learn important info, save it with saveMemory. Promote only the most critical to L1.")
       appendLine("- Before asking the user for info, search L2 first — you may already know the answer.")
       appendLine("- When you need live external data (GitHub, web, etc.), use mcpTool to fetch it.")
+      appendLine("- RAG: searchDocuments, listDocuments, knowledgeBaseStatus — search user's uploaded documents and knowledge base.")
+      appendLine("- When the user asks about their documents, use searchDocuments to find relevant passages.")
       appendLine()
       appendLine("Formatting rules:")
       appendLine("- Do NOT use LaTeX notation ($, \\sin, \\times, etc.). Use plain text and Unicode symbols instead (×, ÷, √, π).")
@@ -118,7 +126,7 @@ class LlmChatTask(
       supportAudio = false,
       onDone = onDone,
       systemInstruction = buildSystemInstruction(),
-      tools = listOf(tool(memoryToolSet), tool(mcpToolBridge)),
+      tools = listOf(tool(memoryToolSet), tool(mcpToolBridge), tool(ragToolSet)),
       enableConversationConstrainedDecoding = true,
       coroutineScope = coroutineScope,
     )
@@ -137,6 +145,7 @@ class LlmChatTask(
   override fun MainScreen(data: Any) {
     val myData = data as CustomTaskDataForBuiltinTask
     val viewModel: LlmChatViewModel = hiltViewModel()
+    viewModel.ragManager = ragManager
     LlmChatScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
@@ -146,7 +155,7 @@ class LlmChatTask(
           task = resetTask,
           model = model,
           systemInstruction = buildSystemInstruction(),
-          tools = listOf(tool(memoryToolSet), tool(mcpToolBridge)),
+          tools = listOf(tool(memoryToolSet), tool(mcpToolBridge), tool(ragToolSet)),
           enableConversationConstrainedDecoding = true,
         )
       },
@@ -181,8 +190,10 @@ internal object LlmChatTaskModule {
     hotMemoryStore: HotMemoryStore,
     memoryRepository: MemoryRepository,
     mcpToolBridge: McpToolBridge,
+    ragManager: RagManager,
+    ragDao: RagDao,
   ): CustomTask {
-    return LlmChatTask(hotMemoryStore, memoryRepository, mcpToolBridge)
+    return LlmChatTask(hotMemoryStore, memoryRepository, mcpToolBridge, ragManager, ragDao)
   }
 }
 

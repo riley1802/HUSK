@@ -23,6 +23,8 @@ import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.rag.ChunkResult
+import com.google.ai.edge.gallery.data.rag.RagManager
 import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageError
@@ -47,6 +49,13 @@ private const val TAG = "AGLlmChatViewModel"
 
 @OptIn(ExperimentalApi::class)
 open class LlmChatViewModelBase() : ChatViewModel() {
+  /** RAG manager for automatic document retrieval. Set by the task module. */
+  var ragManager: RagManager? = null
+
+  /** Most recent RAG retrieval results, for source attribution. */
+  var lastRagChunks: List<ChunkResult> = emptyList()
+    private set
+
   fun generateResponse(
     model: Model,
     input: String,
@@ -192,6 +201,13 @@ open class LlmChatViewModelBase() : ChatViewModel() {
                     )
                   }
                 }
+                // Attach RAG source attribution to the final message.
+                if (lastRagChunks.isNotEmpty()) {
+                  val lastMsg = getLastMessage(model = model)
+                  if (lastMsg is ChatMessageText && lastMsg.side == ChatSide.AGENT) {
+                    lastMsg.data = lastRagChunks
+                  }
+                }
                 setInProgress(false)
                 onDone()
               }
@@ -213,7 +229,26 @@ open class LlmChatViewModelBase() : ChatViewModel() {
         val enableThinking =
           allowThinking &&
             model.getBooleanConfigValue(key = ConfigKeys.ENABLE_THINKING, defaultValue = false)
-        val extraContext = if (enableThinking) mapOf("enable_thinking" to "true") else null
+        val extraContextMap = mutableMapOf<String, String>()
+        if (enableThinking) extraContextMap["enable_thinking"] = "true"
+
+        // RAG: retrieve relevant context before inference.
+        lastRagChunks = emptyList()
+        val rag = ragManager
+        if (rag != null) {
+          try {
+            val ragResults = rag.retrieve(input)
+            if (ragResults.isNotEmpty()) {
+              lastRagChunks = ragResults
+              extraContextMap["rag_context"] = rag.formatContextBlock(ragResults)
+              Log.d(TAG, "RAG: injected ${ragResults.size} chunks into context")
+            }
+          } catch (e: Exception) {
+            Log.e(TAG, "RAG retrieval failed, continuing without context", e)
+          }
+        }
+
+        val extraContext = extraContextMap.ifEmpty { null }
 
         model.runtimeHelper.runInference(
           model = model,

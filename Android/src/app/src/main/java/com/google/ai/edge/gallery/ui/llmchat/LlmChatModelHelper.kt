@@ -271,6 +271,11 @@ object LlmChatModelHelper : LlmModelHelper {
     for (audioClip in audioClips) {
       contents.add(Content.AudioBytes(audioClip))
     }
+    // Prepend RAG context if available (injected via extraContext by ViewModel).
+    val ragContext = extraContext?.get("rag_context")
+    if (!ragContext.isNullOrEmpty()) {
+      contents.add(Content.Text(ragContext))
+    }
     // add the text after image and audio for the accurate last token
     if (input.trim().isNotEmpty()) {
       contents.add(Content.Text(input))
