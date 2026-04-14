@@ -24,6 +24,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.common.AudioDecoder
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.RuntimeType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.rag.ChunkResult
 import com.google.ai.edge.gallery.data.rag.RagManager
@@ -350,6 +351,11 @@ open class LlmChatViewModelBase() : ChatViewModel() {
    * Process audio through the Whisper transcription + speaker diarization pipeline.
    * This is the alternative to [generateResponse] when a Whisper model is active.
    */
+  /**
+   * Maximum audio duration (10 minutes) for which a Gemma summary is generated.
+   */
+  private val SUMMARY_MAX_DURATION_MS = 10 * 60 * 1000L
+
   fun processAudioWithWhisper(
     model: Model,
     context: Context,
@@ -423,6 +429,11 @@ open class LlmChatViewModelBase() : ChatViewModel() {
               side = ChatSide.AGENT,
             ),
           )
+
+          // Phase 4: Generate summary if audio is < 10 minutes.
+          if (decoded.durationMs <= SUMMARY_MAX_DURATION_MS) {
+            generateSummaryFromTranscript(model, transcriptSegments)
+          }
         } else {
           // No diarization — just show plain transcript.
           val plainText = segments.joinToString("\n") { seg ->
@@ -436,6 +447,19 @@ open class LlmChatViewModelBase() : ChatViewModel() {
               side = ChatSide.AGENT,
             ),
           )
+
+          // Phase 4: Generate summary if audio is < 10 minutes.
+          if (decoded.durationMs <= SUMMARY_MAX_DURATION_MS) {
+            val simpleSegments = segments.map { seg ->
+              TranscriptSegment(
+                speakerName = "Speaker",
+                text = seg.text,
+                startMs = seg.startMs,
+                endMs = seg.endMs,
+              )
+            }
+            generateSummaryFromTranscript(model, simpleSegments)
+          }
         }
 
         setInProgress(false)
@@ -447,6 +471,78 @@ open class LlmChatViewModelBase() : ChatViewModel() {
         setPreparing(false)
         onError("Transcription error: ${e.message}")
       }
+    }
+  }
+
+  /**
+   * Send transcript to the active LLM (Gemma E4B) for a concise summary.
+   */
+  private suspend fun generateSummaryFromTranscript(
+    model: Model,
+    segments: List<TranscriptSegment>,
+  ) {
+    try {
+      // Only summarize if there's an LLM model available (not a Whisper model).
+      if (model.runtimeType == RuntimeType.WHISPER) {
+        Log.d(TAG, "Skipping summary: active model is Whisper, not an LLM")
+        return
+      }
+
+      val transcriptText = segments.joinToString("\n") { seg ->
+        "${seg.speakerName}: ${seg.text}"
+      }
+
+      val summaryPrompt = "Summarize the following transcript concisely. " +
+        "Highlight key points, decisions, and action items if any.\n\n" +
+        "TRANSCRIPT:\n$transcriptText"
+
+      addMessage(
+        model = model,
+        message = ChatMessageLoading(extraProgressLabel = "Generating summary..."),
+      )
+
+      // Run inference through the LLM.
+      val resultListener: (String, Boolean, String?) -> Unit =
+        { partialResult, done, _ ->
+          if (!partialResult.startsWith("<ctrl")) {
+            val lastMessage = getLastMessage(model = model)
+            if (lastMessage is ChatMessageLoading) {
+              removeLastMessage(model = model)
+              addMessage(
+                model = model,
+                message = ChatMessageText(
+                  content = "**Summary**\n\n$partialResult",
+                  side = ChatSide.AGENT,
+                ),
+              )
+            } else {
+              updateLastTextMessageContentIncrementally(
+                model = model,
+                partialContent = partialResult,
+                latencyMs = if (done) 0f else -1f,
+              )
+            }
+          }
+        }
+
+      val errorListener: (String) -> Unit = { message ->
+        Log.e(TAG, "Summary generation error: $message")
+        if (getLastMessage(model = model) is ChatMessageLoading) {
+          removeLastMessage(model = model)
+        }
+      }
+
+      val cleanUpListener: () -> Unit = {}
+
+      model.runtimeHelper.runInference(
+        model = model,
+        input = summaryPrompt,
+        resultListener = resultListener,
+        cleanUpListener = cleanUpListener,
+        onError = errorListener,
+      )
+    } catch (e: Exception) {
+      Log.e(TAG, "Error generating summary", e)
     }
   }
 

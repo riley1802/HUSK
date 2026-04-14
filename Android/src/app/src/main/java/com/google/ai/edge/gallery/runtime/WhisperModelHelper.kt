@@ -52,7 +52,14 @@ object WhisperModelHelper {
 	 * @param onDone Callback with empty string on success, error message on failure.
 	 */
 	fun initialize(context: Context, model: Model, onDone: (String) -> Unit) {
-		val path = model.getPath(context)
+		initialize(context, model.getPath(context), onDone)
+	}
+
+	/**
+	 * Initialize the Whisper model from a direct file path.
+	 */
+	fun initialize(context: Context, modelPath: String, onDone: (String) -> Unit) {
+		val path = modelPath
 		Log.d(TAG, "Initializing Whisper model from $path")
 
 		if (contextPtr != 0L && loadedModelPath == path) {
