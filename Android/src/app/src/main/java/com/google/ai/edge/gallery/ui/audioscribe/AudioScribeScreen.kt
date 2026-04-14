@@ -98,32 +98,39 @@ fun AudioScribeScreen(
 
 	var selectedTab by remember { mutableIntStateOf(0) }
 
-	// Find models.
-	val allModels = remember(modelManagerViewModel) {
+	// Observe model manager state to react when models finish loading/downloading.
+	val modelManagerUiState = modelManagerViewModel?.uiState?.collectAsState()
+	val allModels = remember(modelManagerUiState?.value) {
 		modelManagerViewModel?.getAllModels() ?: emptyList()
 	}
 	val gemmaE4b = remember(allModels) { viewModel.findGemmaE4b(allModels) }
 	val whisperModel = remember(allModels, uiState.selectedWhisperModel) { viewModel.findWhisperModel(allModels) }
 
 	// Auto-download all 3 Whisper models on screen entry (skips already-downloaded).
-	LaunchedEffect(modelManagerViewModel) {
-		if (modelManagerViewModel != null) {
+	LaunchedEffect(allModels) {
+		if (modelManagerViewModel != null && allModels.isNotEmpty()) {
 			val task = modelManagerViewModel.getTaskById(com.google.ai.edge.gallery.data.BuiltInTaskId.LLM_ASK_AUDIO)
 			val whisperNames = listOf("Whisper-Tiny", "Whisper-Base", "Whisper-Small")
 			for (model in allModels) {
 				if (model.name in whisperNames) {
 					val path = model.getPath(context)
 					val file = java.io.File(path)
+					Log.d(TAG, "Checking ${model.name}: path=$path exists=${file.exists()}")
 					if (!file.exists()) {
-						Log.d(TAG, "Auto-downloading ${model.name}")
+						Log.d(TAG, "Auto-downloading ${model.name} from ${model.url}")
 						modelManagerViewModel.downloadModel(task, model)
+					} else {
+						Log.d(TAG, "${model.name} already downloaded")
 					}
 				}
 			}
+		} else {
+			Log.d(TAG, "No models available yet (count=${allModels.size})")
 		}
 	}
 
 	// Auto-initialize selected Whisper model when available.
+	// Re-check periodically in case download just completed.
 	LaunchedEffect(uiState.selectedWhisperModel, whisperModel) {
 		if (!uiState.whisperModelReady && !uiState.isInitializing && whisperModel != null) {
 			viewModel.initializeWhisperFromModel(context, whisperModel)

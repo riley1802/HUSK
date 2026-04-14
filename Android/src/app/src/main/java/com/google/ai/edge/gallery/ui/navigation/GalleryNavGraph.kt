@@ -72,6 +72,8 @@ import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeScreen
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeViewModel
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.isLegacyTasks
 import com.google.ai.edge.gallery.firebaseAnalytics
@@ -100,6 +102,7 @@ private const val ROUTE_MODEL_MANAGER = "model_manager"
 private const val ROUTE_KNOWLEDGE_BASE = "knowledge_base"
 private const val ROUTE_NOTES_LIST = "notes_list"
 private const val ROUTE_NOTE_CONVERSATION = "note_conversation"
+private const val ROUTE_AUDIO_SCRIBE = "audio_scribe"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -200,11 +203,9 @@ fun GalleryNavHost(
           enableAnimation = enableHomeScreenAnimation,
           navigateToTaskScreen = { task ->
             pickedTask = task
-            // Audio Scribe manages its own models (Whisper) — skip model selection.
-            if (task.id == BuiltInTaskId.LLM_ASK_AUDIO && task.models.isNotEmpty()) {
-              val defaultModel = task.models.first()
-              enableModelListAnimation = false
-              navController.navigate("$ROUTE_MODEL/${task.id}/${defaultModel.name}")
+            // Audio Scribe has its own dedicated screen — skip model selection entirely.
+            if (task.id == BuiltInTaskId.LLM_ASK_AUDIO) {
+              navController.navigate(ROUTE_AUDIO_SCRIBE)
             } else {
               enableModelListAnimation = true
               navController.navigate(ROUTE_MODEL_LIST)
@@ -418,6 +419,23 @@ fun GalleryNavHost(
           },
         )
       }
+    }
+
+    // Audio Scribe — dedicated screen with its own model management.
+    composable(
+      route = ROUTE_AUDIO_SCRIBE,
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) {
+      val audioScribeViewModel: AudioScribeViewModel = hiltViewModel()
+      AudioScribeScreen(
+        viewModel = audioScribeViewModel,
+        modelManagerViewModel = modelManagerViewModel,
+        navigateUp = {
+          enableHomeScreenAnimation = false
+          navController.navigateUp()
+        },
+      )
     }
 
     // Notes list screen.

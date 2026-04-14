@@ -214,6 +214,9 @@
       "minDeviceMemoryInGb": 4,
       "commitHash": "main",
       "runtimeType": "whisper",
+      "defaultConfig": {
+        "accelerators": "cpu"
+      },
       "taskTypes": [
         "llm_ask_audio"
       ],
@@ -228,6 +231,9 @@
       "minDeviceMemoryInGb": 4,
       "commitHash": "main",
       "runtimeType": "whisper",
+      "defaultConfig": {
+        "accelerators": "cpu"
+      },
       "taskTypes": [
         "llm_ask_audio"
       ],
@@ -242,6 +248,9 @@
       "minDeviceMemoryInGb": 6,
       "commitHash": "main",
       "runtimeType": "whisper",
+      "defaultConfig": {
+        "accelerators": "cpu"
+      },
       "taskTypes": [
         "llm_ask_audio"
       ],
@@ -255,6 +264,9 @@
       "sizeInBytes": 20000000,
       "minDeviceMemoryInGb": 4,
       "commitHash": "main",
+      "defaultConfig": {
+        "accelerators": "cpu"
+      },
       "taskTypes": [
         "llm_ask_audio"
       ],
