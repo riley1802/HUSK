@@ -16,6 +16,8 @@
 
 package com.google.ai.edge.gallery.ui.navigation
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -401,7 +403,8 @@ fun GalleryNavHost(
     }
   }
 
-  // Handle incoming intents for deep links
+  // Handle incoming intents for deep links and share actions
+  val context = LocalContext.current
   val intent = androidx.activity.compose.LocalActivity.current?.intent
   val data = intent?.data
   if (data != null) {
@@ -419,6 +422,28 @@ fun GalleryNavHost(
       }
     } else if (data.toString() == "com.google.ai.edge.gallery://global_model_manager") {
       navController.navigate(ROUTE_MODEL_MANAGER)
+    }
+  }
+
+  // Handle incoming SEND intents for RAG document ingestion
+  if (intent?.action == Intent.ACTION_SEND) {
+    val shareUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+    } else {
+      @Suppress("DEPRECATION")
+      intent.getParcelableExtra(Intent.EXTRA_STREAM)
+    }
+    if (shareUri != null) {
+      intent.action = null  // Consume the intent
+      Log.d(TAG, "Share intent received: $shareUri")
+      navController.navigate(ROUTE_KNOWLEDGE_BASE)
+      // Ingestion is handled by the KB screen's file picker or manually
+      // via the ViewModel. For share intents, we navigate to the KB screen.
+      android.widget.Toast.makeText(
+        context,
+        "Document shared — open Knowledge Base to manage",
+        android.widget.Toast.LENGTH_SHORT,
+      ).show()
     }
   }
 }
