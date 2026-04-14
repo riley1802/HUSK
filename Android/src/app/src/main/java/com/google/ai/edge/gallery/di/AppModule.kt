@@ -37,6 +37,8 @@ import com.google.ai.edge.gallery.data.DownloadRepository
 import com.google.ai.edge.gallery.data.memory.HotMemoryStore
 import com.google.ai.edge.gallery.data.memory.MemoryDao
 import com.google.ai.edge.gallery.data.memory.MemoryDatabase
+import com.google.ai.edge.gallery.data.rag.RagDao
+import com.google.ai.edge.gallery.data.rag.RagDatabase
 import com.google.ai.edge.gallery.data.mcp.McpManager
 import com.google.ai.edge.gallery.data.mcp.McpToolBridge
 import com.google.ai.edge.gallery.data.mcp.McpTransport
@@ -219,6 +221,30 @@ internal object AppModule {
     memoryDao: MemoryDao,
   ): MemoryRepository {
     return MemoryRepository(memoryDao)
+  }
+
+  // ---- RAG Platform ----
+
+  // Provides RagDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideRagDatabase(
+    @ApplicationContext context: Context,
+  ): RagDatabase {
+    return Room.databaseBuilder(
+      context,
+      RagDatabase::class.java,
+      "husk_rag.db",
+    ).build()
+  }
+
+  // Provides RagDao
+  @Provides
+  @Singleton
+  fun provideRagDao(
+    database: RagDatabase,
+  ): RagDao {
+    return database.ragDao()
   }
 
   // ---- MCP Platform ----
