@@ -471,6 +471,24 @@ class EnhancedAgentTools(
 
 ---
 
+## Known Requirements & Gotchas
+
+### Thinking Mode Must Be Enabled
+Memory tools require **Thinking Mode to be ON** in the chat UI. Without thinking mode,
+Gemma 4 E2B generates malformed tool call syntax (doubled tokens, broken JSON) that
+LiteRT-LM's constrained decoding parser cannot parse. Constrained decoding
+(`enableConversationConstrainedDecoding = true`) is set in code, but the model still
+needs thinking mode active to reliably produce well-formed multi-step tool calls.
+
+**User-facing requirement:** Toggle Thinking Mode ON before using memory features in Talk.
+
+### Constrained Decoding is Required
+All tasks with memory/MCP tools must set `enableConversationConstrainedDecoding = true`
+during initialization and session reset. Without it, the model may generate tool calls
+that fail to parse, causing an `INVALID_ARGUMENT` error and aborting the response.
+
+---
+
 ## Verification Plan
 
 ### L1 Memory

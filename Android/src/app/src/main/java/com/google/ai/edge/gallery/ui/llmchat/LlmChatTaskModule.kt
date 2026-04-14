@@ -115,6 +115,7 @@ class LlmChatTask(
       onDone = onDone,
       systemInstruction = buildSystemInstruction(),
       tools = listOf(tool(memoryToolSet), tool(mcpToolBridge)),
+      enableConversationConstrainedDecoding = true,
       coroutineScope = coroutineScope,
     )
   }
@@ -142,6 +143,7 @@ class LlmChatTask(
           model = model,
           systemInstruction = buildSystemInstruction(),
           tools = listOf(tool(memoryToolSet), tool(mcpToolBridge)),
+          enableConversationConstrainedDecoding = true,
         )
       },
       emptyStateComposable = {
