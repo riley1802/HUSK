@@ -98,6 +98,7 @@ import com.google.ai.edge.gallery.ui.common.rememberDelayedAnimationProgress
 import com.google.ai.edge.gallery.ui.common.tos.AppTosDialog
 import com.google.ai.edge.gallery.ui.common.tos.TosViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.notes.NotesViewModel
 import com.google.ai.edge.gallery.ui.theme.customColors
 import java.time.LocalTime
 import kotlinx.coroutines.delay
@@ -124,9 +125,13 @@ private object HomeScreenDestination {
 fun HomeScreen(
   modelManagerViewModel: ModelManagerViewModel,
   tosViewModel: TosViewModel,
+  notesViewModel: NotesViewModel,
   navigateToTaskScreen: (Task) -> Unit,
   onModelsClicked: () -> Unit,
   onKnowledgeBaseClicked: () -> Unit = {},
+  onNotesClicked: () -> Unit = {},
+  onNotesSearchClicked: () -> Unit = {},
+  onNoteClicked: (noteId: String) -> Unit = {},
   enableAnimation: Boolean,
   modifier: Modifier = Modifier,
 ) {
@@ -336,10 +341,14 @@ fun HomeScreen(
 
                 HuskHub(
                   modelManagerViewModel = modelManagerViewModel,
+                  notesViewModel = notesViewModel,
                   tasks = tasks,
                   enableAnimation = enableAnimation,
                   navigateToTaskScreen = navigateToTaskScreen,
                   onModelsClicked = onModelsClicked,
+                  onNotesClicked = onNotesClicked,
+                  onNotesSearchClicked = onNotesSearchClicked,
+                  onNoteClicked = onNoteClicked,
                 )
 
                 Spacer(
@@ -492,10 +501,14 @@ private fun HuskIntroText(enableAnimation: Boolean) {
 @Composable
 private fun HuskHub(
   modelManagerViewModel: ModelManagerViewModel,
+  notesViewModel: NotesViewModel,
   tasks: List<Task>,
   enableAnimation: Boolean,
   navigateToTaskScreen: (Task) -> Unit,
   onModelsClicked: () -> Unit,
+  onNotesClicked: () -> Unit,
+  onNotesSearchClicked: () -> Unit,
+  onNoteClicked: (noteId: String) -> Unit,
 ) {
   val talkTask = remember(tasks) { tasks.firstOrNull { it.id == BuiltInTaskId.LLM_CHAT } }
   val secondaryTasks =
@@ -526,6 +539,13 @@ private fun HuskHub(
     if (talkTask != null) {
       HuskTalkCard(task = talkTask, onClick = { navigateToTaskScreen(talkTask) })
     }
+
+    HuskNotesCard(
+      viewModel = notesViewModel,
+      onCardClick = onNotesClicked,
+      onSearchClick = onNotesSearchClicked,
+      onNoteClick = onNoteClicked,
+    )
 
     HuskSecondaryGrid(
       tasks = secondaryTasks,

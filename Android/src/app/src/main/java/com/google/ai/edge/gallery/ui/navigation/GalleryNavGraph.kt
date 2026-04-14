@@ -83,6 +83,10 @@ import com.google.ai.edge.gallery.ui.modelmanager.GlobalModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.notes.NoteConversationScreen
+import com.google.ai.edge.gallery.ui.notes.NoteConversationViewModel
+import com.google.ai.edge.gallery.ui.notes.NotesListScreen
+import com.google.ai.edge.gallery.ui.notes.NotesViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -93,6 +97,8 @@ private const val ROUTE_MODEL = "route_model"
 private const val ROUTE_BENCHMARK = "benchmark"
 private const val ROUTE_MODEL_MANAGER = "model_manager"
 private const val ROUTE_KNOWLEDGE_BASE = "knowledge_base"
+private const val ROUTE_NOTES_LIST = "notes_list"
+private const val ROUTE_NOTE_CONVERSATION = "note_conversation"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -189,6 +195,7 @@ fun GalleryNavHost(
         HomeScreen(
           modelManagerViewModel = modelManagerViewModel,
           tosViewModel = hiltViewModel(),
+          notesViewModel = hiltViewModel(),
           enableAnimation = enableHomeScreenAnimation,
           navigateToTaskScreen = { task ->
             pickedTask = task
@@ -201,6 +208,9 @@ fun GalleryNavHost(
           },
           onModelsClicked = { navController.navigate(ROUTE_MODEL_MANAGER) },
           onKnowledgeBaseClicked = { navController.navigate(ROUTE_KNOWLEDGE_BASE) },
+          onNotesClicked = { navController.navigate(ROUTE_NOTES_LIST) },
+          onNotesSearchClicked = { navController.navigate("$ROUTE_NOTES_LIST?search=true") },
+          onNoteClicked = { noteId -> navController.navigate("$ROUTE_NOTE_CONVERSATION/$noteId") },
         )
       }
     }
@@ -400,6 +410,62 @@ fun GalleryNavHost(
           },
         )
       }
+    }
+
+    // Notes list screen.
+    composable(
+      route = "$ROUTE_NOTES_LIST?search={search}",
+      arguments = listOf(navArgument("search") { type = NavType.BoolType; defaultValue = false }),
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) { backStackEntry ->
+      val startWithSearch = backStackEntry.arguments?.getBoolean("search") ?: false
+      val notesViewModel: NotesViewModel = hiltViewModel()
+      NotesListScreen(
+        viewModel = notesViewModel,
+        navigateUp = {
+          enableHomeScreenAnimation = false
+          navController.navigateUp()
+        },
+        navigateToNote = { noteId, targetMessageId ->
+          val route = if (targetMessageId != null) {
+            "$ROUTE_NOTE_CONVERSATION/$noteId?targetMessageId=$targetMessageId"
+          } else {
+            "$ROUTE_NOTE_CONVERSATION/$noteId"
+          }
+          navController.navigate(route)
+        },
+        startWithSearch = startWithSearch,
+      )
+    }
+
+    // Note conversation screen.
+    composable(
+      route = "$ROUTE_NOTE_CONVERSATION/{noteId}?targetMessageId={targetMessageId}",
+      arguments = listOf(
+        navArgument("noteId") { type = NavType.StringType },
+        navArgument("targetMessageId") { type = NavType.StringType; nullable = true; defaultValue = null },
+      ),
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) { backStackEntry ->
+      val noteId = backStackEntry.arguments?.getString("noteId") ?: return@composable
+      val targetMessageId = backStackEntry.arguments?.getString("targetMessageId")
+      val conversationViewModel: NoteConversationViewModel = hiltViewModel()
+
+      // Get the currently loaded model for inference.
+      val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
+      val selectedModel = modelManagerUiState.selectedModel
+
+      NoteConversationScreen(
+        viewModel = conversationViewModel,
+        model = selectedModel,
+        noteId = noteId,
+        targetMessageId = targetMessageId,
+        navigateUp = {
+          navController.navigateUp()
+        },
+      )
     }
   }
 
