@@ -15,6 +15,12 @@ Integrated the Google AI Edge RAG SDK (v0.1.0) into HUSK for on-device document 
 - SDK uses native JNI libraries: `libgecko_embedding_model_jni.so`, `libsqlite_vector_store_jni.so`, `libtext_chunker_jni.so`
 - `SqliteVectorStore` v0.1.0 does NOT expose a delete API — cleanup requires DB file recreation
 
+### Gecko Embedding Dimensions
+- `Gecko_256_quant.tflite` — the "256" is the **max sequence length** (tokens), NOT the embedding dimension
+- Gecko always outputs **768-dimensional** embeddings regardless of sequence length variant
+- Mismatching dimensions causes a native SIGABRT in `sqlite_memory_store.cc` (`Check failed: record.embeddings().size() == embedding_dimension_`)
+- Always verify actual output dimensions by checking the model, not inferring from the filename
+
 ### KDoc Comment Bug
 - Don't use `/*` inside KDoc comments (e.g., `text/*` in a comment causes "Unclosed comment" error in kapt)
 - The Kotlin compiler treats `/*` inside `/** ... */` as nested comment start
