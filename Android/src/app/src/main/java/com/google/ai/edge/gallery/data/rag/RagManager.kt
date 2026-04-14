@@ -105,55 +105,70 @@ class RagManager @Inject constructor(
 				throw IllegalArgumentException("Document produced no text chunks")
 			}
 
-			// Embed
+			// Embed in sub-batches for speed + progress feedback.
 			if (!embeddingModelManager.isLoaded) {
 				throw IllegalStateException("Embedding model not loaded")
 			}
-			val embeddings = embeddingModelManager.batchEmbed(chunkTexts)
-
-			// Store chunks in Room
-			val chunks = chunkTexts.mapIndexed { index, text ->
-				DocumentChunk(
-					id = UUID.randomUUID().toString(),
-					documentId = documentId,
-					chunkIndex = index,
-					content = text,
-					tokenEstimate = estimateTokens(text),
-					metadata = parseResult.metadata.takeIf { it.isNotEmpty() }
-						?.let { meta -> meta.entries.joinToString(", ") { "${it.key}=${it.value}" } },
-				)
-			}
-			ragDao.insertChunks(chunks)
-
-			// Store vectors in SqliteVectorStore
 			val store = vectorStore
 				?: throw IllegalStateException("Vector store not initialized")
-			chunks.forEachIndexed { index, chunk ->
-				val embedding = embeddings[index]
-				// Store chunk ID as data, embeddings as vector.
-				// Metadata is in Room — no need to duplicate in vector store.
-				val record = VectorStoreRecord.create(
-					chunk.id,
-					ImmutableList.copyOf(embedding.map { it }),
-				)
-				store.insert(record)
+
+			val allChunks = mutableListOf<DocumentChunk>()
+			val batchSize = 20 // Sub-batch size — balances JNI overhead vs memory
+			val totalBatches = (chunkTexts.size + batchSize - 1) / batchSize
+			val embedStart = System.currentTimeMillis()
+
+			for (batchIdx in 0 until totalBatches) {
+				val startIdx = batchIdx * batchSize
+				val endIdx = minOf(startIdx + batchSize, chunkTexts.size)
+				val batchTexts = chunkTexts.subList(startIdx, endIdx)
+
+				// Embed this sub-batch
+				val batchEmbeddings = embeddingModelManager.batchEmbed(batchTexts)
+
+				// Create chunk entities + insert into Room and vector store immediately
+				val batchChunks = batchTexts.mapIndexed { i, text ->
+					DocumentChunk(
+						id = UUID.randomUUID().toString(),
+						documentId = documentId,
+						chunkIndex = startIdx + i,
+						content = text,
+						tokenEstimate = estimateTokens(text),
+						metadata = parseResult.metadata.takeIf { it.isNotEmpty() }
+							?.let { meta -> meta.entries.joinToString(", ") { "${it.key}=${it.value}" } },
+					)
+				}
+				ragDao.insertChunks(batchChunks)
+
+				batchChunks.forEachIndexed { i, chunk ->
+					val record = VectorStoreRecord.create(
+						chunk.id,
+						ImmutableList.copyOf(batchEmbeddings[i].map { it }),
+					)
+					store.insert(record)
+				}
+
+				allChunks.addAll(batchChunks)
+				Log.d(TAG, "Embedded batch ${batchIdx + 1}/$totalBatches (${allChunks.size}/${chunkTexts.size} chunks)")
 			}
 
+			val embedMs = System.currentTimeMillis() - embedStart
+			Log.d(TAG, "Embedding completed in ${embedMs}ms for ${chunkTexts.size} chunks")
+
 			// Calculate vector size estimate
-			val vectorSizeBytes = (chunks.size * embeddingModelManager.dimensions * 4).toLong()
+			val vectorSizeBytes = (allChunks.size * embeddingModelManager.dimensions * 4).toLong()
 
 			// Update document as READY
 			val readyDoc = document.copy(
 				status = IngestionStatus.READY,
-				chunkCount = chunks.size,
-				totalTokenEstimate = chunks.sumOf { it.tokenEstimate },
+				chunkCount = allChunks.size,
+				totalTokenEstimate = allChunks.sumOf { it.tokenEstimate },
 				contentHash = contentHash,
 				vectorSizeBytes = vectorSizeBytes,
 				embeddingModel = embeddingModelManager.modelName,
 				updatedAt = System.currentTimeMillis(),
 			)
 			ragDao.updateDocument(readyDoc)
-			Log.d(TAG, "Ingested '${name}': ${chunks.size} chunks, ${vectorSizeBytes} bytes vectors")
+			Log.d(TAG, "Ingested '${name}': ${allChunks.size} chunks, ${vectorSizeBytes} bytes vectors, ${embedMs}ms")
 			readyDoc
 		} catch (e: Exception) {
 			Log.e(TAG, "Ingestion failed for '$name': ${e.message}", e)
