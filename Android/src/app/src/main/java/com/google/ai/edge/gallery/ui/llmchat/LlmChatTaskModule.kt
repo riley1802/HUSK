@@ -272,8 +272,8 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
       category = Category.LLM,
       icon = Icons.Outlined.Mic,
       models = mutableListOf(),
-      description = "Have Husk transcribe or translate an audio clip on-device",
-      shortDescription = "Transcribe and translate audio",
+      description = "Transcribe audio and video files with speaker identification",
+      shortDescription = "Transcribe with speaker ID",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
         "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",
