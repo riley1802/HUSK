@@ -25,7 +25,13 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.mcp.McpToolBridge
+import com.google.ai.edge.gallery.data.memory.HotMemoryStore
+import com.google.ai.edge.gallery.data.memory.MemoryRepository
+import com.google.ai.edge.gallery.data.memory.MemoryToolSet
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.tool
 import dagger.Module
 import dagger.Provides
@@ -35,8 +41,13 @@ import dagger.multibindings.IntoSet
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-class AgentChatTask @Inject constructor() : CustomTask {
+class AgentChatTask(
+  private val hotMemoryStore: HotMemoryStore,
+  private val memoryRepository: MemoryRepository,
+  private val mcpToolBridge: McpToolBridge,
+) : CustomTask {
   private val agentTools = AgentTools()
+  private val memoryToolSet = MemoryToolSet(hotMemoryStore, memoryRepository)
 
   override val task: Task =
     Task(
@@ -71,6 +82,40 @@ class AgentChatTask @Inject constructor() : CustomTask {
           .trimIndent(),
     )
 
+  private fun buildSystemInstruction(): Contents? {
+    val skillManagerVm = agentTools.skillManagerViewModel
+    val selectedSkills = skillManagerVm.getSelectedSkills()
+
+    val memoryBlock = hotMemoryStore.serializeForSystemPrompt()
+    val skillSystemPrompt = if (selectedSkills.isNotEmpty()) {
+      skillManagerVm.getSelectedSkillsNamesAndDescriptions()
+    } else null
+
+    // If neither memory nor skills are available, no system instruction needed.
+    if (memoryBlock == null && skillSystemPrompt == null) return null
+
+    val prompt = buildString {
+      // Inject L1 memory first.
+      if (memoryBlock != null) {
+        appendLine(memoryBlock)
+        appendLine()
+      }
+
+      // Inject skill instructions with memory/MCP awareness.
+      if (skillSystemPrompt != null) {
+        appendLine(task.defaultSystemPrompt.replace("___SKILLS___", skillSystemPrompt))
+      }
+
+      // Add memory/MCP tool guidance.
+      appendLine()
+      appendLine("You also have memory and external tools:")
+      appendLine("- Memory: searchMemory, saveMemory, promoteToL1, etc. — remember things about the user.")
+      appendLine("- MCP: mcpTool, listMcpServers — reach external services for live data.")
+      appendLine("Use these alongside skills when relevant.")
+    }
+    return Contents.of(listOf(Content.Text(prompt)))
+  }
+
   override fun initializeModelFn(
     context: Context,
     coroutineScope: CoroutineScope,
@@ -84,13 +129,8 @@ class AgentChatTask @Inject constructor() : CustomTask {
         supportImage = true,
         supportAudio = true,
         onDone = onDone,
-        systemInstruction =
-          if (agentTools.skillManagerViewModel.getSelectedSkills().isEmpty()) {
-            null
-          } else {
-            agentTools.skillManagerViewModel.getSystemPrompt(task.defaultSystemPrompt)
-          },
-        tools = listOf(tool(agentTools)),
+        systemInstruction = buildSystemInstruction(),
+        tools = listOf(tool(agentTools), tool(memoryToolSet), tool(mcpToolBridge)),
         enableConversationConstrainedDecoding = true,
       )
     }
@@ -122,7 +162,11 @@ class AgentChatTask @Inject constructor() : CustomTask {
 internal object AgentChatTaskModule {
   @Provides
   @IntoSet
-  fun provideTask(): CustomTask {
-    return AgentChatTask()
+  fun provideTask(
+    hotMemoryStore: HotMemoryStore,
+    memoryRepository: MemoryRepository,
+    mcpToolBridge: McpToolBridge,
+  ): CustomTask {
+    return AgentChatTask(hotMemoryStore, memoryRepository, mcpToolBridge)
   }
 }
