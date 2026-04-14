@@ -150,10 +150,10 @@ class AudioScribeViewModel @Inject constructor(
 
 				Log.d(TAG, "Decoded: ${decoded.samples.size} samples, ${decoded.durationMs}ms")
 
-				// Phase 2: Transcribe with Whisper.
+				// Phase 2: Transcribe with Whisper in chunks for long audio.
 				_uiState.update { it.copy(processingPhase = "Transcribing...") }
 
-				val segments = WhisperModelHelper.transcribe(decoded.samples)
+				val segments = transcribeInChunks(decoded.samples, decoded.durationMs)
 				if (segments.isEmpty()) {
 					_uiState.update {
 						it.copy(isProcessing = false, processingPhase = null, error = "Transcription produced no results")
@@ -201,6 +201,56 @@ class AudioScribeViewModel @Inject constructor(
 				}
 			}
 		}
+	}
+
+	/**
+	 * Transcribe audio in chunks to avoid OOM on long recordings.
+	 * Whisper processes optimally in ~30 second windows.
+	 */
+	private suspend fun transcribeInChunks(
+		samples: FloatArray,
+		durationMs: Long,
+	): List<WhisperModelHelper.TranscriptSegment> {
+		// For short audio (< 5 min), process in one shot.
+		val chunkDurationSamples = 30 * 16000 // 30 seconds at 16kHz
+		if (samples.size <= chunkDurationSamples * 10) { // < ~5 min
+			return WhisperModelHelper.transcribe(samples)
+		}
+
+		// For long audio, process in 30-second chunks.
+		Log.d(TAG, "Long audio (${durationMs / 1000}s), transcribing in chunks")
+		val allSegments = mutableListOf<WhisperModelHelper.TranscriptSegment>()
+		var offset = 0
+		var chunkIndex = 0
+		val totalChunks = (samples.size + chunkDurationSamples - 1) / chunkDurationSamples
+
+		while (offset < samples.size) {
+			val end = minOf(offset + chunkDurationSamples, samples.size)
+			val chunk = samples.copyOfRange(offset, end)
+			val chunkOffsetMs = (offset.toLong() * 1000L) / 16000L
+
+			_uiState.update {
+				it.copy(processingPhase = "Transcribing chunk ${chunkIndex + 1}/$totalChunks...")
+			}
+
+			val chunkSegments = WhisperModelHelper.transcribe(chunk)
+
+			// Adjust timestamps to be relative to the full audio.
+			for (seg in chunkSegments) {
+				allSegments.add(
+					WhisperModelHelper.TranscriptSegment(
+						text = seg.text,
+						startMs = seg.startMs + chunkOffsetMs,
+						endMs = seg.endMs + chunkOffsetMs,
+					)
+				)
+			}
+
+			offset = end
+			chunkIndex++
+		}
+
+		return allSegments
 	}
 
 	private suspend fun generateSummary(model: Model, segments: List<TranscriptSegment>) {
