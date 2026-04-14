@@ -130,14 +130,11 @@ class RagManager @Inject constructor(
 				?: throw IllegalStateException("Vector store not initialized")
 			chunks.forEachIndexed { index, chunk ->
 				val embedding = embeddings[index]
+				// Store chunk ID as data, embeddings as vector.
+				// Metadata is in Room — no need to duplicate in vector store.
 				val record = VectorStoreRecord.create(
 					chunk.id,
 					ImmutableList.copyOf(embedding.map { it }),
-					ImmutableMap.of(
-						"document_id", documentId as Any,
-						"document_name", name as Any,
-						"chunk_index", index as Any,
-					),
 				)
 				store.insert(record)
 			}
