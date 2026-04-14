@@ -1,0 +1,13 @@
+# Desiccated Circuitry
+
+## A Visual Philosophy for HUSK
+
+**Desiccated Circuitry** finds beauty in the intersection of organic decay and silicon precision — the moment where a dried husk's fibrous texture becomes indistinguishable from the trace lines of a circuit board. This is design as archaeology: peeling back layers to reveal the architecture beneath, treating negative space as the primary medium and mark-making as a carefully rationed resource.
+
+The palette is austere and deliberate: pure black grounds, warm grays that carry the memory of wheat and ash, and a single accent — a dim amber glow that suggests heat dissipation, the warmth of a processor thinking in the dark. Every tonal choice is the product of painstaking calibration, as if each gray value were selected through days of comparison against physical samples of dried plant matter and brushed aluminum. Color is earned, never given freely. The monochrome restriction is not limitation but liberation — it forces every shape, every weight, every spacing decision to carry meaning that color would otherwise mask.
+
+Form language borrows simultaneously from two vocabularies: the irregular, fibrous striations of dried organic matter (corn husks, bark, seed pods) and the rigid orthogonal logic of printed circuit boards, die layouts, and semiconductor architecture. These two systems collide in compositions where organic curves terminate in precise right angles, where flowing grain patterns resolve into grid structures. The tension between these systems is the entire point — it mirrors the project's nature as something organic (human conversation, creative thought) running on something rigid (silicon, binary, inference engines). Every line is placed with the obsessive precision of a master engraver, each curve plotted as if by a watchmaker mapping a new escapement.
+
+Typography exists only as whisper: thin, geometric, monospaced letterforms that feel etched rather than printed. Text never explains — it labels, it marks, it anchors. The word HUSK itself is treated as a material object, its letterforms constructed from the same visual DNA as the surrounding composition. Kerning is surgical. Weight is featherlight. Placement is architectural.
+
+Scale relationships are dramatic: vast dark fields interrupted by concentrated clusters of detail, like examining a microchip die under magnification. The eye is drawn to zones of activity surrounded by deliberate emptiness. The overall effect must feel like an artifact from an imaginary discipline: part botanical illustration, part semiconductor documentation, part encrypted message from a system that thinks in the dark.
