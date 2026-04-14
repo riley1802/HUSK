@@ -99,6 +99,12 @@ message Settings {
   int32 accent_color_argb = 12;  // 0 = use default sand accent
   FontScale font_scale = 13;
   ChatDensity chat_density = 14;
+
+  // Notes brainstorm system prompts (user-editable, per model).
+  string notes_e2b_system_prompt = 15;
+  string notes_e4b_system_prompt = 16;
+  // Which model the Notes screen defaults to ("e2b" or "e4b").
+  string notes_selected_model = 17;
 }
 
 message UserData {

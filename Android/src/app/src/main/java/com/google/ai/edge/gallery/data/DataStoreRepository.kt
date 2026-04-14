@@ -125,6 +125,14 @@ interface DataStoreRepository {
   // RAG settings (in-memory until proto schema update).
   fun getRagAutoRetrieve(): Boolean
   fun setRagAutoRetrieve(enabled: Boolean)
+
+  // Notes brainstorm settings.
+  fun readNotesE2bSystemPrompt(): String
+  fun saveNotesE2bSystemPrompt(prompt: String)
+  fun readNotesE4bSystemPrompt(): String
+  fun saveNotesE4bSystemPrompt(prompt: String)
+  fun readNotesSelectedModel(): String
+  fun saveNotesSelectedModel(modelKey: String)
 }
 
 /** Repository for managing data using Proto DataStore. */
@@ -499,5 +507,46 @@ class DefaultDataStoreRepository(
 
   override fun setRagAutoRetrieve(enabled: Boolean) {
     ragAutoRetrieve = enabled
+  }
+
+  // ---- Notes brainstorm settings ----
+
+  override fun readNotesE2bSystemPrompt(): String {
+    val stored = runBlocking { dataStore.data.first().notesE2BSystemPrompt }
+    return stored.ifBlank { com.google.ai.edge.gallery.data.notes.NotesDefaults.DEFAULT_E2B_SYSTEM_PROMPT }
+  }
+
+  override fun saveNotesE2bSystemPrompt(prompt: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setNotesE2BSystemPrompt(prompt).build()
+      }
+    }
+  }
+
+  override fun readNotesE4bSystemPrompt(): String {
+    val stored = runBlocking { dataStore.data.first().notesE4BSystemPrompt }
+    return stored.ifBlank { com.google.ai.edge.gallery.data.notes.NotesDefaults.DEFAULT_E4B_SYSTEM_PROMPT }
+  }
+
+  override fun saveNotesE4bSystemPrompt(prompt: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setNotesE4BSystemPrompt(prompt).build()
+      }
+    }
+  }
+
+  override fun readNotesSelectedModel(): String {
+    val stored = runBlocking { dataStore.data.first().notesSelectedModel }
+    return stored.ifBlank { com.google.ai.edge.gallery.data.notes.NotesDefaults.DEFAULT_MODEL }
+  }
+
+  override fun saveNotesSelectedModel(modelKey: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setNotesSelectedModel(modelKey).build()
+      }
+    }
   }
 }
