@@ -232,7 +232,8 @@ open class LlmChatViewModelBase() : ChatViewModel() {
         val extraContextMap = mutableMapOf<String, String>()
         if (enableThinking) extraContextMap["enable_thinking"] = "true"
 
-        // RAG: retrieve relevant context before inference.
+        // RAG: pre-retrieve for source attribution tracking only.
+        // Context injection is handled by the model calling searchDocuments tool.
         lastRagChunks = emptyList()
         val rag = ragManager
         if (rag != null) {
@@ -240,11 +241,10 @@ open class LlmChatViewModelBase() : ChatViewModel() {
             val ragResults = rag.retrieve(input)
             if (ragResults.isNotEmpty()) {
               lastRagChunks = ragResults
-              extraContextMap["rag_context"] = rag.formatContextBlock(ragResults)
-              Log.d(TAG, "RAG: injected ${ragResults.size} chunks into context")
+              Log.d(TAG, "RAG: pre-retrieved ${ragResults.size} chunks for attribution")
             }
           } catch (e: Exception) {
-            Log.e(TAG, "RAG retrieval failed, continuing without context", e)
+            Log.e(TAG, "RAG pre-retrieval failed", e)
           }
         }
 

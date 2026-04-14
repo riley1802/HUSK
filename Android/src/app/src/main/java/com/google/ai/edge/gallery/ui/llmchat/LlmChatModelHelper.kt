@@ -271,16 +271,9 @@ object LlmChatModelHelper : LlmModelHelper {
     for (audioClip in audioClips) {
       contents.add(Content.AudioBytes(audioClip))
     }
-    // Combine RAG context + user input into a single Content.Text to avoid
-    // LiteRT treating them as separate turns (which clears the KV cache).
-    val ragContext = extraContext?.get("rag_context")
-    val combinedText = if (!ragContext.isNullOrEmpty() && input.trim().isNotEmpty()) {
-      "$ragContext\n\nUser question: ${input.trim()}"
-    } else {
-      input.trim()
-    }
-    if (combinedText.isNotEmpty()) {
-      contents.add(Content.Text(combinedText))
+    // add the text after image and audio for the accurate last token
+    if (input.trim().isNotEmpty()) {
+      contents.add(Content.Text(input))
     }
 
     conversation.sendMessageAsync(
