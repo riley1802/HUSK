@@ -36,13 +36,20 @@ Source root: `Android/src/app/src/main/java/com/google/ai/edge/gallery/`
 | `ui/thermal/` | Thermal monitoring — ThermalMonitor + ThermalMeter UI |
 | `ui/modelmanager/` | Model download and management |
 | `ui/agentchat/` | Agent Skills with tool calling |
+| `ui/knowledgebase/` | RAG knowledge base management |
+| `ui/notes/` | Notes with per-note LLM conversations |
 | `ui/common/` | Shared Compose components (chat bubbles, markdown, inputs) |
 | `ui/navigation/` | Navigation graph and routing |
 | `data/` | Data models, enums (Model.kt, RuntimeType) |
 | `data/speaker/` | Speaker diarization — Room entities, DAOs, embedding manager, diarization engine |
+| `data/rag/` | RAG documents, chunks, embeddings (Room DB) + RagManager |
+| `data/mcp/` | MCP server config, transport layer, tool bridge |
+| `data/memory/` | Hot/warm memory and context management |
+| `data/notes/` | Notes data layer |
 | `runtime/` | Model lifecycle — WhisperJni, WhisperModelHelper, LlmModelHelper |
 | `common/` | Utilities — AudioDecoder, ProjectConfig |
 | `di/` | Hilt dependency injection modules |
+| `worker/` | Background WorkManager tasks |
 | `customtasks/` | Mobile Actions, Tiny Garden (function calling tasks) |
 
 Native code: `Android/src/app/src/main/cpp/`
@@ -184,9 +191,9 @@ ViewModels use `@HiltViewModel` with constructor injection.
 ### Allowlist System
 Models are defined in JSON allowlists (`model_allowlists/1_0_11.json`). Each entry specifies:
 - `name`, `url` (HuggingFace download), `sizeInBytes`
-- `runtimeType`: `"litert_llm"` (Gemma/LLM), `"whisper"` (whisper.cpp GGML), or standard TFLite
-- `defaultConfig.accelerators`: `"gpu"` or `"cpu"` (REQUIRED — missing causes NPE)
-- `llmConfig`: optional LLM-specific settings (topK, temperature, etc.)
+- `runtimeType`: `"whisper"` (whisper.cpp GGML), `"aicore"` (Android AICore), or omit for LiteRT-LM / standard TFLite
+- `defaultConfig.accelerators`: `"gpu"`, `"cpu"`, or `"gpu,cpu"` (REQUIRED — missing causes NPE)
+- Generation parameters (`topK`, `temperature`, `maxTokens`, etc.) live inside `defaultConfig`
 
 ### Runtime Loading Precedence
 1. Test file: `/data/local/tmp/model_allowlist_test.json` (development only)
@@ -194,9 +201,10 @@ Models are defined in JSON allowlists (`model_allowlists/1_0_11.json`). Each ent
 3. Cached local file (offline fallback)
 
 ### RuntimeType Routing
-- `LITERT_LLM` → `LlmModelHelper` (chat, thinking, tool calling)
+- `LITERT_LM` → `LlmModelHelper` (chat, thinking, tool calling) — inferred from `.litertlm` file extension
 - `WHISPER` → `WhisperModelHelper` (speech-to-text via JNI)
-- Default TFLite → standard interpreter
+- `AICORE` → Android AICore runtime (on-device Google models)
+- `UNKNOWN` / default → standard TFLite interpreter
 
 ### Downloads
 Model downloads use Android WorkManager via `DownloadRepository`. Progress is tracked in `ModelManagerViewModel.uiState` and displayed per-model in UI.
@@ -210,3 +218,6 @@ Model downloads use Android WorkManager via `DownloadRepository`. Progress is tr
 | App settings | Proto DataStore | Theme, selected models, preferences |
 | Model files | Disk (app files dir) | Downloaded GGML/TFLite model binaries |
 | Model allowlists | JSON (GitHub/cache) | Available model definitions |
+| Notes | Room | User notes with per-note LLM conversations |
+| RAG documents | Room + SqliteVectorStore | Ingested documents, chunks, Gecko embeddings |
+| Memory | In-memory + Room | Hot/warm context for cross-conversation awareness |

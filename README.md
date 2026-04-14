@@ -19,13 +19,17 @@ HUSK is a fork of [Google AI Edge Gallery](https://github.com/google-ai-edge/gal
 
 **Notes and Brainstorm** — An AI-driven brainstorming companion on the home screen. Notes persist in a Room database with auto-tagging and full-text search (FTS4).
 
-**Knowledge Base (RAG)** — On-device document retrieval using the Google AI Edge RAG SDK. Documents are indexed with Gecko embeddings (768-dimensional) stored in a SqliteVectorStore, grounding model responses in your own content.
+**Knowledge Base (RAG)** — On-device document retrieval using the Google AI Edge Local Agents SDK. Documents are indexed with Gecko embeddings (768-dimensional) stored in a SqliteVectorStore, grounding model responses in your own content.
 
 **Prompt Lab** — A focused workspace for testing prompts and single-turn use cases with granular control over parameters like temperature and top-k.
 
 **Mobile Actions** — Offline device controls and automated tasks powered by a fine-tuned FunctionGemma 270m.
 
 **Tiny Garden** — An experimental mini-game using natural language to plant and harvest a virtual garden, also powered by FunctionGemma 270m.
+
+**MCP Integration** — Model Context Protocol client for connecting to external tool servers, bridging MCP tools into the agent chat system.
+
+**Context Memory** — Hot and warm memory layers that give the AI context awareness across conversations.
 
 **Model Management and Benchmark** — Download models from the built-in list or load custom models. Run benchmark tests to compare performance on your specific hardware.
 
@@ -47,7 +51,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system architectur
 - **LiteRT** — Lightweight runtime for optimized model execution
 - **whisper.cpp** — Native C++ speech recognition via NDK/JNI
 - **ECAPA-TDNN** — Speaker embedding model for diarization
-- **Google AI Edge RAG SDK** — Retrieval-augmented generation pipeline
+- **Google AI Edge Local Agents** — Retrieval-augmented generation pipeline
 - **Room Database** — Persistent local storage for notes and transcripts
 - **Proto DataStore** — Typed settings and user preferences
 - **Hugging Face** — Model discovery and download

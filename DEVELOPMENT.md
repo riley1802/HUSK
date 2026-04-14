@@ -100,3 +100,10 @@ Ensure the test allowlist is pushed to the device and the app has been restarted
 
 **`defaultConfig` NPE**
 Model entries in the allowlist must include a `defaultConfig` block with at least `"accelerators": "cpu"`. A missing block causes a null pointer exception on model list load.
+
+## See Also
+
+- [README.md](README.md) — Project overview and features
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — System architecture documentation
+- [model_allowlists/README.md](model_allowlists/README.md) — Model allowlist schema and workflow
+- [Android/README.md](Android/README.md) — Android module structure guide

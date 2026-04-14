@@ -27,8 +27,7 @@ Android/src/app/src/main/
 │   │   ├── rag/               # RAG documents, chunks, embeddings (Room DB)
 │   │   ├── mcp/               # MCP server config and transport layer
 │   │   ├── memory/            # Hot memory / context management
-│   │   ├── notes/             # Notes data layer
-│   │   └── aicore/            # AICore integration
+│   │   └── notes/             # Notes data layer
 │   ├── runtime/               # Model lifecycle (WhisperJni, LlmModelHelper)
 │   ├── common/                # Utilities (AudioDecoder, ProjectConfig)
 │   ├── di/                    # Hilt dependency injection
