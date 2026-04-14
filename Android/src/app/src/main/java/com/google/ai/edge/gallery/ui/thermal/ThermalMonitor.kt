@@ -17,6 +17,9 @@
 package com.google.ai.edge.gallery.ui.thermal
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
@@ -25,12 +28,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 /**
- * Monitors device thermal state using Android APIs and shell commands.
- * Provides live temperature readings for CPU, battery, skin, and other sensors.
+ * Monitors device thermal state using Android public APIs.
+ * Uses PowerManager for thermal status/headroom and BatteryManager for battery temp.
+ * Estimates skin/CPU temps from headroom since direct sensor access requires system privileges.
  */
 object ThermalMonitor {
 
@@ -43,12 +45,9 @@ object ThermalMonitor {
 	)
 
 	enum class ThermalType(val label: String) {
-		CPU("CPU"),
+		CPU("CPU (est.)"),
 		BATTERY("Battery"),
-		SKIN("Skin"),
-		USB("USB"),
-		PA("Power Amp"),
-		MODEM("Modem"),
+		SKIN("Skin (est.)"),
 		OTHER("Other"),
 	}
 
@@ -58,19 +57,11 @@ object ThermalMonitor {
 		val headroom: Float,
 		val timestampMs: Long = System.currentTimeMillis(),
 	) {
-		/** Highest temperature across all sensors. */
 		val peakTemp: Float get() = readings.maxOfOrNull { it.tempCelsius } ?: 0f
-
-		/** Skin temperature (most relevant for throttling). */
 		val skinTemp: Float? get() = readings.find { it.type == ThermalType.SKIN }?.tempCelsius
-
-		/** CPU temperature. */
 		val cpuTemp: Float? get() = readings.find { it.type == ThermalType.CPU }?.tempCelsius
-
-		/** Battery temperature. */
 		val batteryTemp: Float? get() = readings.find { it.type == ThermalType.BATTERY }?.tempCelsius
 
-		/** Thermal status label. */
 		val statusLabel: String get() = when (thermalStatus) {
 			0 -> "None"
 			1 -> "Light"
@@ -82,20 +73,24 @@ object ThermalMonitor {
 			else -> "Unknown"
 		}
 
-		/** Color hint: 0=green, 1=yellow, 2=orange, 3=red */
 		val severityLevel: Int get() = when {
 			thermalStatus >= 3 -> 3
 			thermalStatus >= 2 -> 2
 			thermalStatus >= 1 -> 1
-			(skinTemp ?: 0f) >= 40f -> 2
-			(skinTemp ?: 0f) >= 37f -> 1
+			headroom > 0.9f -> 2
+			headroom > 0.7f -> 1
 			else -> 0
+		}
+
+		/** Estimated skin temp from headroom (SKIN throttles at 38-45C range). */
+		val estimatedSkinFromHeadroom: Float get() {
+			if (headroom.isNaN()) return 0f
+			// headroom 0 = at threshold (38C skin), headroom 1.0 = at throttle point
+			// Linear interpolation: 25C at headroom 0, 38C at headroom ~0.8, 45C at 1.0+
+			return (25f + headroom * 25f).coerceIn(20f, 55f)
 		}
 	}
 
-	/**
-	 * Recommended temperature ranges for on-device AI inference.
-	 */
 	object Recommendations {
 		const val IDEAL_MAX_SKIN = 37f
 		const val WARNING_SKIN = 40f
@@ -106,12 +101,13 @@ object ThermalMonitor {
 		const val WARNING_BATTERY = 40f
 		const val CRITICAL_BATTERY = 45f
 
-		fun getSkinAdvice(temp: Float): String = when {
-			temp < IDEAL_MAX_SKIN -> "Ideal for sustained inference"
-			temp < WARNING_SKIN -> "Warm — performance may reduce soon"
-			temp < THROTTLE_SKIN -> "Hot — CPU throttling likely active"
-			temp < CRITICAL_SKIN -> "Very hot — heavy throttling, reduce workload"
-			else -> "Critical — device may shut down tasks"
+		fun getSkinAdvice(headroom: Float): String = when {
+			headroom.isNaN() -> "Unable to read thermal headroom"
+			headroom < 0.5f -> "Cool — ideal for sustained inference"
+			headroom < 0.7f -> "Warm — performance stable"
+			headroom < 0.9f -> "Hot — performance may reduce soon"
+			headroom < 1.0f -> "Very hot — throttling imminent"
+			else -> "Throttling active — reduce workload"
 		}
 
 		fun getBatteryAdvice(temp: Float): String = when {
@@ -122,52 +118,38 @@ object ThermalMonitor {
 		}
 	}
 
-	/**
-	 * Emit thermal snapshots at the given interval.
-	 */
 	fun observe(context: Context, intervalMs: Long = 3000): Flow<ThermalSnapshot> = flow {
 		val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
 
 		while (true) {
-			val snapshot = readThermals(powerManager)
+			val snapshot = readThermals(context, powerManager)
 			emit(snapshot)
 			delay(intervalMs)
 		}
 	}.flowOn(Dispatchers.IO)
 
-	/**
-	 * Single-shot thermal reading.
-	 */
 	fun read(context: Context): ThermalSnapshot {
 		val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-		return readThermals(powerManager)
+		return readThermals(context, powerManager)
 	}
 
-	private fun readThermals(powerManager: PowerManager): ThermalSnapshot {
+	private fun readThermals(context: Context, powerManager: PowerManager): ThermalSnapshot {
 		val readings = mutableListOf<ThermalReading>()
 
-		// Read from dumpsys thermalservice via shell.
+		// Battery temperature from BatteryManager (always available, no permissions needed).
 		try {
-			val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "dumpsys thermalservice 2>/dev/null"))
-			val reader = BufferedReader(InputStreamReader(process.inputStream))
-			var inCurrentSection = false
-
-			reader.forEachLine { line ->
-				if (line.contains("Current temperatures from HAL:")) {
-					inCurrentSection = true
-				} else if (inCurrentSection) {
-					if (line.contains("Temperature{")) {
-						parseThermalLine(line)?.let { readings.add(it) }
-					} else if (line.isNotBlank() && !line.startsWith("\t") && !line.startsWith(" ")) {
-						inCurrentSection = false
-					}
-				}
+			val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+			val batteryTemp = batteryIntent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0)?.let {
+				it / 10f // BatteryManager reports in tenths of a degree
+			} ?: 0f
+			if (batteryTemp > 0f) {
+				readings.add(ThermalReading("Battery", batteryTemp, ThermalType.BATTERY))
 			}
-			process.waitFor()
 		} catch (e: Exception) {
-			Log.w(TAG, "Failed to read thermalservice", e)
+			Log.w(TAG, "Failed to read battery temp", e)
 		}
 
+		// Thermal status and headroom from PowerManager.
 		val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
 			powerManager.currentThermalStatus
 		} else {
@@ -175,9 +157,19 @@ object ThermalMonitor {
 		}
 
 		val headroom = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-			powerManager.getThermalHeadroom(10) // 10 second forecast
+			powerManager.getThermalHeadroom(10)
 		} else {
 			Float.NaN
+		}
+
+		// Estimate skin and CPU temperatures from headroom.
+		if (!headroom.isNaN() && headroom > 0f) {
+			val estimatedSkin = (25f + headroom * 25f).coerceIn(20f, 55f)
+			readings.add(ThermalReading("Skin (est.)", estimatedSkin, ThermalType.SKIN))
+
+			// CPU typically runs a few degrees above skin.
+			val estimatedCpu = (estimatedSkin + 3f).coerceIn(25f, 60f)
+			readings.add(ThermalReading("CPU (est.)", estimatedCpu, ThermalType.CPU))
 		}
 
 		return ThermalSnapshot(
@@ -185,32 +177,5 @@ object ThermalMonitor {
 			thermalStatus = thermalStatus,
 			headroom = headroom,
 		)
-	}
-
-	private fun parseThermalLine(line: String): ThermalReading? {
-		// Temperature{mValue=30.7, mType=0, mName=AP, mStatus=0}
-		try {
-			val valueMatch = Regex("mValue=([\\d.]+)").find(line) ?: return null
-			val typeMatch = Regex("mType=(\\d+)").find(line) ?: return null
-			val nameMatch = Regex("mName=(\\w+)").find(line) ?: return null
-
-			val temp = valueMatch.groupValues[1].toFloat()
-			val typeInt = typeMatch.groupValues[1].toInt()
-			val name = nameMatch.groupValues[1]
-
-			val type = when (name.uppercase()) {
-				"AP" -> ThermalType.CPU
-				"BAT", "SUBBAT" -> ThermalType.BATTERY
-				"SKIN" -> ThermalType.SKIN
-				"USB" -> ThermalType.USB
-				"PA" -> ThermalType.PA
-				"CP" -> ThermalType.MODEM
-				else -> ThermalType.OTHER
-			}
-
-			return ThermalReading(name = name, tempCelsius = temp, type = type)
-		} catch (e: Exception) {
-			return null
-		}
 	}
 }

@@ -73,7 +73,7 @@ fun ThermalMeterChip(modifier: Modifier = Modifier) {
 	val thermalFlow = remember { ThermalMonitor.observe(context, intervalMs = 3000) }
 	val snapshot by thermalFlow.collectAsState(initial = null)
 
-	val displayTemp = snapshot?.skinTemp ?: snapshot?.cpuTemp ?: 0f
+	val displayTemp = snapshot?.skinTemp ?: snapshot?.batteryTemp ?: snapshot?.cpuTemp ?: 0f
 	val severity = snapshot?.severityLevel ?: 0
 
 	val dotColor by animateColorAsState(
@@ -181,12 +181,12 @@ private fun ThermalDetailSheet(
 			)
 
 			RecommendationCard(
-				title = "Skin Temperature",
-				current = snapshot.skinTemp,
+				title = "Thermal Status",
+				current = snapshot.skinTemp ?: snapshot.estimatedSkinFromHeadroom,
 				ideal = ThermalMonitor.Recommendations.IDEAL_MAX_SKIN,
 				warning = ThermalMonitor.Recommendations.WARNING_SKIN,
 				critical = ThermalMonitor.Recommendations.CRITICAL_SKIN,
-				advice = snapshot.skinTemp?.let { ThermalMonitor.Recommendations.getSkinAdvice(it) },
+				advice = ThermalMonitor.Recommendations.getSkinAdvice(snapshot.headroom),
 			)
 
 			RecommendationCard(
