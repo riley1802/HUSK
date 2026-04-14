@@ -26,6 +26,7 @@ import com.google.ai.edge.gallery.BenchmarkResultsSerializer
 import com.google.ai.edge.gallery.CutoutsSerializer
 import com.google.ai.edge.gallery.GalleryLifecycleProvider
 import com.google.ai.edge.gallery.HotMemorySerializer
+import com.google.ai.edge.gallery.McpServerRegistrySerializer
 import com.google.ai.edge.gallery.SettingsSerializer
 import com.google.ai.edge.gallery.SkillsSerializer
 import com.google.ai.edge.gallery.UserDataSerializer
@@ -36,8 +37,13 @@ import com.google.ai.edge.gallery.data.DownloadRepository
 import com.google.ai.edge.gallery.data.memory.HotMemoryStore
 import com.google.ai.edge.gallery.data.memory.MemoryDao
 import com.google.ai.edge.gallery.data.memory.MemoryDatabase
+import com.google.ai.edge.gallery.data.mcp.McpManager
+import com.google.ai.edge.gallery.data.mcp.McpToolBridge
+import com.google.ai.edge.gallery.data.mcp.McpTransport
+import com.google.ai.edge.gallery.data.mcp.transports.HttpTransport
 import com.google.ai.edge.gallery.data.memory.MemoryRepository
 import com.google.ai.edge.gallery.proto.BenchmarkResults
+import com.google.ai.edge.gallery.proto.McpServerRegistry
 import com.google.ai.edge.gallery.proto.CutoutCollection
 import com.google.ai.edge.gallery.proto.HotMemory
 import com.google.ai.edge.gallery.proto.Settings
@@ -213,6 +219,55 @@ internal object AppModule {
     memoryDao: MemoryDao,
   ): MemoryRepository {
     return MemoryRepository(memoryDao)
+  }
+
+  // ---- MCP Platform ----
+
+  // Provides McpServerRegistrySerializer
+  @Provides
+  @Singleton
+  fun provideMcpRegistrySerializer(): Serializer<McpServerRegistry> {
+    return McpServerRegistrySerializer
+  }
+
+  // Provides DataStore<McpServerRegistry>
+  @Provides
+  @Singleton
+  fun provideMcpRegistryDataStore(
+    @ApplicationContext context: Context,
+    serializer: Serializer<McpServerRegistry>,
+  ): DataStore<McpServerRegistry> {
+    return DataStoreFactory.create(
+      serializer = serializer,
+      produceFile = { context.dataStoreFile("mcp_servers.pb") },
+    )
+  }
+
+  // Provides HttpTransport as McpTransport (via @IntoSet for extensibility)
+  @Provides
+  @Singleton
+  @dagger.multibindings.IntoSet
+  fun provideHttpTransport(): McpTransport {
+    return HttpTransport()
+  }
+
+  // Provides McpManager
+  @Provides
+  @Singleton
+  fun provideMcpManager(
+    registryDataStore: DataStore<McpServerRegistry>,
+    transports: Set<@JvmSuppressWildcards McpTransport>,
+  ): McpManager {
+    return McpManager(registryDataStore, transports)
+  }
+
+  // Provides McpToolBridge
+  @Provides
+  @Singleton
+  fun provideMcpToolBridge(
+    mcpManager: McpManager,
+  ): McpToolBridge {
+    return McpToolBridge(mcpManager)
   }
 
   // Provides AppLifecycleProvider

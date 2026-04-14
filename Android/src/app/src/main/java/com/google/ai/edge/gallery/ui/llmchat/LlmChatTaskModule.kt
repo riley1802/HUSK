@@ -42,6 +42,7 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.mcp.McpToolBridge
 import com.google.ai.edge.gallery.data.memory.HotMemoryStore
 import com.google.ai.edge.gallery.data.memory.MemoryRepository
 import com.google.ai.edge.gallery.data.memory.MemoryToolSet
@@ -65,6 +66,7 @@ import kotlinx.coroutines.CoroutineScope
 class LlmChatTask(
   private val hotMemoryStore: HotMemoryStore,
   private val memoryRepository: MemoryRepository,
+  private val mcpToolBridge: McpToolBridge,
 ) : CustomTask {
   private val memoryToolSet = MemoryToolSet(hotMemoryStore, memoryRepository)
 
@@ -91,9 +93,10 @@ class LlmChatTask(
       appendLine("You have memory tools available. Use them proactively:")
       appendLine("- L1 (hot): promoteToL1, demoteFromL1, updateL1, listL1 — always-visible context.")
       appendLine("- L2 (long-term): searchMemory, saveMemory, updateMemory, deleteMemory, listMemories — deep knowledge store.")
+      appendLine("- L3 (external): listMcpServers, listMcpTools, mcpTool — reach external tools via MCP.")
       appendLine("- When you learn important info, save it with saveMemory. Promote only the most critical to L1.")
       appendLine("- Before asking the user for info, search L2 first — you may already know the answer.")
-      appendLine("- When information changes, update it. When it's outdated, delete or demote it.")
+      appendLine("- When you need live external data (GitHub, web, etc.), use mcpTool to fetch it.")
     }
     return Contents.of(listOf(Content.Text(systemPrompt)))
   }
@@ -111,7 +114,7 @@ class LlmChatTask(
       supportAudio = false,
       onDone = onDone,
       systemInstruction = buildSystemInstruction(),
-      tools = listOf(tool(memoryToolSet)),
+      tools = listOf(tool(memoryToolSet), tool(mcpToolBridge)),
       coroutineScope = coroutineScope,
     )
   }
@@ -138,7 +141,7 @@ class LlmChatTask(
           task = resetTask,
           model = model,
           systemInstruction = buildSystemInstruction(),
-          tools = listOf(tool(memoryToolSet)),
+          tools = listOf(tool(memoryToolSet), tool(mcpToolBridge)),
         )
       },
       emptyStateComposable = {
@@ -168,8 +171,12 @@ class LlmChatTask(
 internal object LlmChatTaskModule {
   @Provides
   @IntoSet
-  fun provideTask(hotMemoryStore: HotMemoryStore, memoryRepository: MemoryRepository): CustomTask {
-    return LlmChatTask(hotMemoryStore, memoryRepository)
+  fun provideTask(
+    hotMemoryStore: HotMemoryStore,
+    memoryRepository: MemoryRepository,
+    mcpToolBridge: McpToolBridge,
+  ): CustomTask {
+    return LlmChatTask(hotMemoryStore, memoryRepository, mcpToolBridge)
   }
 }
 

@@ -181,3 +181,20 @@ message HotMemory {
   repeated HotMemoryEntry entries = 1;
   int64 last_updated_ms = 2;
 }
+
+// Configuration for a single MCP server connection.
+message McpServerConfig {
+  string id = 1;
+  string name = 2;
+  string url = 3;
+  string transport = 4;         // "http", "websocket", or "stdio"
+  string auth_token = 5;        // encrypted via AndroidX Security Crypto
+  bool auto_connect = 6;
+  repeated string enabled_tools = 7;
+  bool read_only = 8;
+}
+
+// Registry of all configured MCP servers.
+message McpServerRegistry {
+  repeated McpServerConfig servers = 1;
+}
