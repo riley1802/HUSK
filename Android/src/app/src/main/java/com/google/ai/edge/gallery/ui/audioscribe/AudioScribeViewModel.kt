@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery.ui.audioscribe
 
 import android.content.Context
 import android.net.Uri
+import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -136,6 +137,14 @@ class AudioScribeViewModel @Inject constructor(
 		viewModelScope.launch(Dispatchers.Default) {
 			val sourceName = getFileName(context, uri)
 
+			// Acquire a wake lock so processing continues reliably in the background.
+			val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+			val wakeLock = powerManager.newWakeLock(
+				PowerManager.PARTIAL_WAKE_LOCK,
+				"husk:audio_scribe_processing"
+			)
+			wakeLock.acquire(120 * 60 * 1000L) // 2 hour max timeout
+
 			_uiState.update {
 				it.copy(
 					isProcessing = true,
@@ -229,6 +238,10 @@ class AudioScribeViewModel @Inject constructor(
 				Log.e(TAG, "Error processing audio", e)
 				_uiState.update {
 					it.copy(isProcessing = false, processingPhase = null, etaText = null, error = "Processing error: ${e.message}")
+				}
+			} finally {
+				if (wakeLock.isHeld) {
+					wakeLock.release()
 				}
 			}
 		}
