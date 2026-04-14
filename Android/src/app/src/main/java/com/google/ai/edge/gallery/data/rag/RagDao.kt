@@ -33,6 +33,9 @@ interface RagDao {
 	@Query("SELECT * FROM documents WHERE content_hash = :hash LIMIT 1")
 	suspend fun getDocumentByHash(hash: String): Document?
 
+	@Query("SELECT * FROM documents WHERE source_uri = :sourceUri LIMIT 1")
+	suspend fun getDocumentBySourceUri(sourceUri: String): Document?
+
 	@Query("SELECT * FROM documents WHERE status = :status")
 	suspend fun getDocumentsByStatus(status: IngestionStatus): List<Document>
 

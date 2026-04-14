@@ -46,6 +46,9 @@ import com.google.ai.edge.gallery.data.mcp.McpToolBridge
 import com.google.ai.edge.gallery.data.mcp.McpTransport
 import com.google.ai.edge.gallery.data.mcp.transports.HttpTransport
 import com.google.ai.edge.gallery.data.memory.MemoryRepository
+import com.google.ai.edge.gallery.data.notes.NotesDao
+import com.google.ai.edge.gallery.data.notes.NotesDatabase
+import com.google.ai.edge.gallery.data.notes.NotesRepository
 import com.google.ai.edge.gallery.proto.BenchmarkResults
 import com.google.ai.edge.gallery.proto.McpServerRegistry
 import com.google.ai.edge.gallery.proto.CutoutCollection
@@ -223,6 +226,40 @@ internal object AppModule {
     memoryDao: MemoryDao,
   ): MemoryRepository {
     return MemoryRepository(memoryDao)
+  }
+
+  // ---- Notes Platform ----
+
+  // Provides NotesDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideNotesDatabase(
+    @ApplicationContext context: Context,
+  ): NotesDatabase {
+    return Room.databaseBuilder(
+      context,
+      NotesDatabase::class.java,
+      "husk_notes.db",
+    ).build()
+  }
+
+  // Provides NotesDao
+  @Provides
+  @Singleton
+  fun provideNotesDao(
+    database: NotesDatabase,
+  ): NotesDao {
+    return database.notesDao()
+  }
+
+  // Provides NotesRepository
+  @Provides
+  @Singleton
+  fun provideNotesRepository(
+    notesDao: NotesDao,
+    ragManager: RagManager,
+  ): NotesRepository {
+    return NotesRepository(notesDao, ragManager)
   }
 
   // ---- RAG Platform ----

@@ -182,6 +182,106 @@ class RagManager @Inject constructor(
 		}
 	}
 
+	/**
+	 * Ingest raw text directly (no file parsing). Used for indexing note
+	 * conversations into the RAG knowledge base.
+	 */
+	suspend fun ingestText(
+		text: String,
+		name: String,
+		sourceUri: String,
+	): Document = withContext(Dispatchers.IO) {
+		val documentId = UUID.randomUUID().toString()
+		val document = Document(
+			id = documentId,
+			name = name,
+			mimeType = "text/plain",
+			sourceUri = sourceUri,
+			status = IngestionStatus.PENDING,
+		)
+		ragDao.insertDocument(document)
+
+		try {
+			ragDao.updateDocument(document.copy(status = IngestionStatus.PROCESSING))
+
+			val contentHash = sha256(text)
+			val chunkTexts = chunkText(text)
+			if (chunkTexts.isEmpty()) {
+				throw IllegalArgumentException("Text produced no chunks")
+			}
+
+			if (!embeddingModelManager.isLoaded) {
+				throw IllegalStateException("Embedding model not loaded")
+			}
+			val store = vectorStore
+				?: throw IllegalStateException("Vector store not initialized")
+
+			val allChunks = mutableListOf<DocumentChunk>()
+			val batchSize = 20
+			val totalBatches = (chunkTexts.size + batchSize - 1) / batchSize
+
+			for (batchIdx in 0 until totalBatches) {
+				val startIdx = batchIdx * batchSize
+				val endIdx = minOf(startIdx + batchSize, chunkTexts.size)
+				val batchTexts = chunkTexts.subList(startIdx, endIdx)
+
+				val batchEmbeddings = embeddingModelManager.batchEmbed(batchTexts)
+				val batchChunks = batchTexts.mapIndexed { i, chunkText ->
+					DocumentChunk(
+						id = UUID.randomUUID().toString(),
+						documentId = documentId,
+						chunkIndex = startIdx + i,
+						content = chunkText,
+						tokenEstimate = estimateTokens(chunkText),
+						metadata = null,
+					)
+				}
+				ragDao.insertChunks(batchChunks)
+
+				batchChunks.forEachIndexed { i, chunk ->
+					val record = VectorStoreRecord.create(
+						chunk.id,
+						ImmutableList.copyOf(batchEmbeddings[i].map { it }),
+					)
+					store.insert(record)
+				}
+				allChunks.addAll(batchChunks)
+			}
+
+			val vectorSizeBytes = (allChunks.size * embeddingModelManager.dimensions * 4).toLong()
+			val readyDoc = document.copy(
+				status = IngestionStatus.READY,
+				chunkCount = allChunks.size,
+				totalTokenEstimate = allChunks.sumOf { it.tokenEstimate },
+				contentHash = contentHash,
+				vectorSizeBytes = vectorSizeBytes,
+				embeddingModel = embeddingModelManager.modelName,
+				updatedAt = System.currentTimeMillis(),
+			)
+			ragDao.updateDocument(readyDoc)
+			Log.d(TAG, "Ingested text '$name': ${allChunks.size} chunks")
+			readyDoc
+		} catch (e: Exception) {
+			Log.e(TAG, "Text ingestion failed for '$name': ${e.message}", e)
+			val failedDoc = document.copy(
+				status = IngestionStatus.FAILED,
+				errorMessage = e.message ?: "Unknown error",
+				updatedAt = System.currentTimeMillis(),
+			)
+			ragDao.updateDocument(failedDoc)
+			failedDoc
+		}
+	}
+
+	/**
+	 * Delete a document identified by its source URI.
+	 * Used for re-indexing notes — delete old version before re-ingesting.
+	 */
+	suspend fun deleteDocumentBySourceUri(sourceUri: String) = withContext(Dispatchers.IO) {
+		val doc = ragDao.getDocumentBySourceUri(sourceUri) ?: return@withContext
+		deleteDocument(doc.id)
+	}
+
 	// ---- Retrieval ----
 
 	/**
