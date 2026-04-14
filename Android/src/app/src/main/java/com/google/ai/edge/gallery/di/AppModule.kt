@@ -49,6 +49,10 @@ import com.google.ai.edge.gallery.data.memory.MemoryRepository
 import com.google.ai.edge.gallery.data.notes.NotesDao
 import com.google.ai.edge.gallery.data.notes.NotesDatabase
 import com.google.ai.edge.gallery.data.notes.NotesRepository
+import com.google.ai.edge.gallery.data.speaker.SpeakerDatabase
+import com.google.ai.edge.gallery.data.speaker.SpeakerDiarizationEngine
+import com.google.ai.edge.gallery.data.speaker.SpeakerEmbeddingManager
+import com.google.ai.edge.gallery.data.speaker.SpeakerProfileDao
 import com.google.ai.edge.gallery.proto.BenchmarkResults
 import com.google.ai.edge.gallery.proto.McpServerRegistry
 import com.google.ai.edge.gallery.proto.CutoutCollection
@@ -260,6 +264,40 @@ internal object AppModule {
     ragManager: RagManager,
   ): NotesRepository {
     return NotesRepository(notesDao, ragManager)
+  }
+
+  // ---- Speaker Diarization ----
+
+  // Provides SpeakerDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideSpeakerDatabase(
+    @ApplicationContext context: Context,
+  ): SpeakerDatabase {
+    return Room.databaseBuilder(
+      context,
+      SpeakerDatabase::class.java,
+      "husk_speakers.db",
+    ).build()
+  }
+
+  // Provides SpeakerProfileDao
+  @Provides
+  @Singleton
+  fun provideSpeakerProfileDao(
+    database: SpeakerDatabase,
+  ): SpeakerProfileDao {
+    return database.speakerProfileDao()
+  }
+
+  // Provides SpeakerDiarizationEngine
+  @Provides
+  @Singleton
+  fun provideSpeakerDiarizationEngine(
+    embeddingManager: SpeakerEmbeddingManager,
+    speakerProfileDao: SpeakerProfileDao,
+  ): SpeakerDiarizationEngine {
+    return SpeakerDiarizationEngine(embeddingManager, speakerProfileDao)
   }
 
   // ---- RAG Platform ----
