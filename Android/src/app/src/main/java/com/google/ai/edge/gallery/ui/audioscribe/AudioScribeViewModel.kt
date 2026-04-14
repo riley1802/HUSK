@@ -17,15 +17,19 @@
 package com.google.ai.edge.gallery.ui.audioscribe
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.ai.edge.gallery.common.AudioDecoder
 import com.google.ai.edge.gallery.data.DataStoreRepository
+import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.speaker.SpeakerDiarizationEngine
 import com.google.ai.edge.gallery.data.speaker.SpeakerEmbeddingManager
 import com.google.ai.edge.gallery.data.speaker.SpeakerProfile
 import com.google.ai.edge.gallery.data.speaker.SpeakerProfileDao
 import com.google.ai.edge.gallery.runtime.WhisperModelHelper
+import com.google.ai.edge.gallery.runtime.runtimeHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,14 +42,23 @@ import javax.inject.Inject
 data class AudioScribeUiState(
 	val selectedWhisperModel: String = "small",
 	val whisperModelReady: Boolean = false,
-	val speakerModelReady: Boolean = false,
 	val speakerProfiles: List<SpeakerProfile> = emptyList(),
 	val isInitializing: Boolean = false,
+
+	// Processing state.
+	val isProcessing: Boolean = false,
+	val processingPhase: String? = null,
+	val processingProgress: Float = 0f,
+
+	// Results.
+	val transcriptSegments: List<TranscriptSegment>? = null,
+	val summaryText: String? = null,
+	val error: String? = null,
 )
 
 /**
- * ViewModel for Audio Scribe Whisper configuration and speaker profile management.
- * Manages Whisper model selection, initialization, and speaker diarization state.
+ * ViewModel for Audio Scribe — manages Whisper transcription, speaker diarization,
+ * and Gemma E4B summary generation.
  */
 @HiltViewModel
 class AudioScribeViewModel @Inject constructor(
@@ -57,6 +70,8 @@ class AudioScribeViewModel @Inject constructor(
 
 	companion object {
 		private const val TAG = "AudioScribeVM"
+		private const val SUMMARY_MAX_DURATION_MS = 10 * 60 * 1000L
+		private const val GEMMA_E4B_MODEL_NAME = "Gemma-4-E4B-it"
 	}
 
 	private val _uiState = MutableStateFlow(AudioScribeUiState())
@@ -73,10 +88,6 @@ class AudioScribeViewModel @Inject constructor(
 		dataStoreRepository.saveWhisperSelectedModel(modelKey)
 	}
 
-	/**
-	 * Initialize the Whisper model for transcription.
-	 * Called when entering the Audio Scribe screen or changing models.
-	 */
 	fun initializeWhisper(context: Context, whisperModelPath: String) {
 		_uiState.update { it.copy(isInitializing = true) }
 		viewModelScope.launch(Dispatchers.IO) {
@@ -99,6 +110,145 @@ class AudioScribeViewModel @Inject constructor(
 		_uiState.update { it.copy(whisperModelReady = false) }
 	}
 
+	/**
+	 * Process an audio/video file through the full pipeline:
+	 * 1. Decode any format to PCM
+	 * 2. Whisper transcription
+	 * 3. Speaker diarization
+	 * 4. Gemma E4B summary (if < 10 min)
+	 */
+	fun processAudioFile(
+		context: Context,
+		uri: Uri,
+		gemmaE4bModel: Model?,
+	) {
+		viewModelScope.launch(Dispatchers.Default) {
+			_uiState.update {
+				it.copy(
+					isProcessing = true,
+					processingPhase = "Extracting audio...",
+					processingProgress = 0f,
+					transcriptSegments = null,
+					summaryText = null,
+					error = null,
+				)
+			}
+
+			try {
+				// Phase 1: Decode audio.
+				val decoder = AudioDecoder(context)
+				val decoded = decoder.decode(uri) { progress ->
+					_uiState.update { it.copy(processingProgress = progress) }
+				}
+
+				if (decoded == null) {
+					_uiState.update {
+						it.copy(isProcessing = false, processingPhase = null, error = "Failed to decode audio file")
+					}
+					return@launch
+				}
+
+				Log.d(TAG, "Decoded: ${decoded.samples.size} samples, ${decoded.durationMs}ms")
+
+				// Phase 2: Transcribe with Whisper.
+				_uiState.update { it.copy(processingPhase = "Transcribing...") }
+
+				val segments = WhisperModelHelper.transcribe(decoded.samples)
+				if (segments.isEmpty()) {
+					_uiState.update {
+						it.copy(isProcessing = false, processingPhase = null, error = "Transcription produced no results")
+					}
+					return@launch
+				}
+
+				// Phase 3: Speaker diarization.
+				_uiState.update { it.copy(processingPhase = "Identifying speakers...") }
+
+				val diarized = diarizationEngine.diarize(segments, decoded.samples)
+				val transcriptSegments = diarized.map { ds ->
+					TranscriptSegment(
+						speakerName = ds.speakerName,
+						text = ds.text,
+						startMs = ds.startMs,
+						endMs = ds.endMs,
+						speakerId = ds.speakerId,
+						speakerEmbedding = ds.speakerEmbedding,
+					)
+				}
+
+				_uiState.update {
+					it.copy(
+						transcriptSegments = transcriptSegments,
+						processingPhase = null,
+					)
+				}
+
+				// Phase 4: Generate summary with Gemma E4B if < 10 minutes.
+				if (decoded.durationMs <= SUMMARY_MAX_DURATION_MS && gemmaE4bModel != null) {
+					_uiState.update { it.copy(processingPhase = "Generating summary...") }
+					generateSummary(gemmaE4bModel, transcriptSegments)
+				}
+
+				_uiState.update { it.copy(isProcessing = false, processingPhase = null) }
+			} catch (e: Exception) {
+				Log.e(TAG, "Error processing audio", e)
+				_uiState.update {
+					it.copy(
+						isProcessing = false,
+						processingPhase = null,
+						error = "Processing error: ${e.message}",
+					)
+				}
+			}
+		}
+	}
+
+	private suspend fun generateSummary(model: Model, segments: List<TranscriptSegment>) {
+		try {
+			val transcriptText = segments.joinToString("\n") { seg ->
+				"${seg.speakerName}: ${seg.text}"
+			}
+
+			val prompt = "Summarize the following transcript concisely. " +
+				"Highlight key points, decisions, and action items if any.\n\n" +
+				"TRANSCRIPT:\n$transcriptText"
+
+			val summaryBuilder = StringBuilder()
+
+			val resultListener: (String, Boolean, String?) -> Unit = { partialResult, done, _ ->
+				if (!partialResult.startsWith("<ctrl")) {
+					summaryBuilder.append(partialResult)
+					_uiState.update { it.copy(summaryText = summaryBuilder.toString()) }
+				}
+			}
+
+			val cleanUpListener: () -> Unit = {}
+			val errorListener: (String) -> Unit = { message ->
+				Log.e(TAG, "Summary generation error: $message")
+			}
+
+			model.runtimeHelper.runInference(
+				model = model,
+				input = prompt,
+				resultListener = resultListener,
+				cleanUpListener = cleanUpListener,
+				onError = errorListener,
+			)
+		} catch (e: Exception) {
+			Log.e(TAG, "Error generating summary", e)
+		}
+	}
+
+	fun clearResults() {
+		_uiState.update {
+			it.copy(
+				transcriptSegments = null,
+				summaryText = null,
+				error = null,
+			)
+		}
+	}
+
 	private fun loadSpeakerProfiles() {
 		viewModelScope.launch(Dispatchers.IO) {
 			val profiles = speakerProfileDao.getAll()
@@ -115,5 +265,12 @@ class AudioScribeViewModel @Inject constructor(
 			diarizationEngine.labelSpeaker(embedding, name, existingProfileId)
 			loadSpeakerProfiles()
 		}
+	}
+
+	/**
+	 * Find the Gemma 4 E4B model from the available models.
+	 */
+	fun findGemmaE4b(models: List<Model>): Model? {
+		return models.find { it.name == GEMMA_E4B_MODEL_NAME }
 	}
 }

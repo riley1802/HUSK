@@ -70,6 +70,7 @@ import androidx.navigation.navArgument
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
+import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.isLegacyTasks
@@ -199,8 +200,15 @@ fun GalleryNavHost(
           enableAnimation = enableHomeScreenAnimation,
           navigateToTaskScreen = { task ->
             pickedTask = task
-            enableModelListAnimation = true
-            navController.navigate(ROUTE_MODEL_LIST)
+            // Audio Scribe manages its own models (Whisper) — skip model selection.
+            if (task.id == BuiltInTaskId.LLM_ASK_AUDIO && task.models.isNotEmpty()) {
+              val defaultModel = task.models.first()
+              enableModelListAnimation = false
+              navController.navigate("$ROUTE_MODEL/${task.id}/${defaultModel.name}")
+            } else {
+              enableModelListAnimation = true
+              navController.navigate(ROUTE_MODEL_LIST)
+            }
             firebaseAnalytics?.logEvent(
               GalleryEvent.CAPABILITY_SELECT.id,
               Bundle().apply { putString("capability_name", task.id) },

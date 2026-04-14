@@ -10,7 +10,9 @@
       "Bash(./gradlew :app:tasks --group build)"
     ],
     "additionalDirectories": [
-      "/tmp"
+      "/tmp",
+      "/home/rileyt/.claude/plans",
+      "/home/rileyt/AI/HUSK/Android/src/app/src/main/cpp/whisper/.git"
     ]
   }
 }

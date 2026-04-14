@@ -17,13 +17,9 @@
 package com.google.ai.edge.gallery.ui.audioscribe
 
 import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,9 +39,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +69,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.theme.customColors
 
 private const val TAG = "AudioScribeScreen"
@@ -86,6 +84,7 @@ private const val TAG = "AudioScribeScreen"
 @Composable
 fun AudioScribeScreen(
 	viewModel: AudioScribeViewModel,
+	modelManagerViewModel: ModelManagerViewModel? = null,
 	navigateUp: () -> Unit,
 ) {
 	val uiState by viewModel.uiState.collectAsState()
@@ -93,11 +92,13 @@ fun AudioScribeScreen(
 	val clipboardManager = LocalClipboardManager.current
 	val scrollState = rememberScrollState()
 
-	// Transcription state.
-	var transcriptSegments by remember { mutableStateOf<List<TranscriptSegment>?>(null) }
-	var summaryText by remember { mutableStateOf<String?>(null) }
-	var processingPhase by remember { mutableStateOf<String?>(null) }
-	var isProcessing by remember { mutableStateOf(false) }
+	// Find Gemma E4B for summary generation.
+	val gemmaE4b: Model? = remember(modelManagerViewModel) {
+		modelManagerViewModel?.let { mm ->
+			val allModels = mm.getAllModels()
+			viewModel.findGemmaE4b(allModels)
+		}
+	}
 
 	// Speaker label sheet state.
 	var labelingSegment by remember { mutableStateOf<TranscriptSegment?>(null) }
@@ -109,7 +110,7 @@ fun AudioScribeScreen(
 		if (result.resultCode == android.app.Activity.RESULT_OK) {
 			result.data?.data?.let { uri ->
 				Log.d(TAG, "Picked file: $uri")
-				// TODO: Process through Whisper pipeline
+				viewModel.processAudioFile(context, uri, gemmaE4b)
 			}
 		}
 	}
@@ -130,14 +131,18 @@ fun AudioScribeScreen(
 					}
 				},
 				actions = {
-					// Share button when transcript is available.
-					if (transcriptSegments != null) {
+					if (uiState.transcriptSegments != null) {
+						// New transcription button.
+						IconButton(onClick = { viewModel.clearResults() }) {
+							Icon(Icons.Outlined.Refresh, contentDescription = "New")
+						}
+						// Share button.
 						IconButton(onClick = {
-							val text = transcriptSegments?.joinToString("\n") { seg ->
+							val text = uiState.transcriptSegments?.joinToString("\n") { seg ->
 								"${seg.speakerName} [${seg.formatTimestamp()}]: ${seg.text}"
 							} ?: ""
-							val fullText = if (summaryText != null) {
-								"SUMMARY:\n$summaryText\n\nTRANSCRIPT:\n$text"
+							val fullText = if (uiState.summaryText != null) {
+								"SUMMARY:\n${uiState.summaryText}\n\nTRANSCRIPT:\n$text"
 							} else {
 								text
 							}
@@ -149,8 +154,9 @@ fun AudioScribeScreen(
 						}) {
 							Icon(Icons.Outlined.Share, contentDescription = "Share")
 						}
+						// Copy button.
 						IconButton(onClick = {
-							val text = transcriptSegments?.joinToString("\n") { seg ->
+							val text = uiState.transcriptSegments?.joinToString("\n") { seg ->
 								"${seg.speakerName} [${seg.formatTimestamp()}]: ${seg.text}"
 							} ?: ""
 							clipboardManager.setText(AnnotatedString(text))
@@ -179,43 +185,54 @@ fun AudioScribeScreen(
 
 			Spacer(modifier = Modifier.height(8.dp))
 
-			if (transcriptSegments == null && !isProcessing) {
-				// Empty state — input controls.
-				EmptyState(
-					onPickFile = {
-						val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-							addCategory(Intent.CATEGORY_OPENABLE)
-							type = "*/*"
-							val mimeTypes = arrayOf("audio/*", "video/*")
-							putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
-							putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
-								.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-								.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-						}
-						filePicker.launch(intent)
-					},
-					onRecord = {
-						// TODO: Open recording flow
-					},
+			// Error display.
+			uiState.error?.let { error ->
+				Text(
+					error,
+					style = MaterialTheme.typography.bodySmall,
+					color = MaterialTheme.colorScheme.error,
+					modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
 				)
-			} else if (isProcessing) {
-				// Processing state.
-				ProcessingState(phase = processingPhase ?: "Processing...")
-			} else {
-				// Transcript view.
-				transcriptSegments?.let { segments ->
+			}
+
+			when {
+				uiState.isProcessing -> {
+					ProcessingState(phase = uiState.processingPhase ?: "Processing...")
+				}
+				uiState.transcriptSegments != null -> {
+					// Transcript view.
 					TranscriptCard(
-						segments = segments,
+						segments = uiState.transcriptSegments!!,
 						onUnknownSpeakerClicked = { segment ->
 							labelingSegment = segment
 						},
 					)
-				}
 
-				// Summary card.
-				summaryText?.let { summary ->
-					Spacer(modifier = Modifier.height(12.dp))
-					SummaryCard(summary = summary)
+					// Summary card.
+					uiState.summaryText?.let { summary ->
+						Spacer(modifier = Modifier.height(12.dp))
+						SummaryCard(summary = summary)
+					}
+				}
+				else -> {
+					// Empty state — input controls.
+					EmptyState(
+						onPickFile = {
+							val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+								addCategory(Intent.CATEGORY_OPENABLE)
+								type = "*/*"
+								val mimeTypes = arrayOf("audio/*", "video/*")
+								putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+								putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+									.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+									.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+							}
+							filePicker.launch(intent)
+						},
+						onRecord = {
+							// TODO: Open recording flow
+						},
+					)
 				}
 			}
 
@@ -295,7 +312,6 @@ private fun EmptyState(
 		horizontalAlignment = Alignment.CenterHorizontally,
 		verticalArrangement = Arrangement.spacedBy(24.dp),
 	) {
-		// Hero icon.
 		Box(
 			modifier = Modifier
 				.size(80.dp)
@@ -327,7 +343,6 @@ private fun EmptyState(
 
 		Spacer(modifier = Modifier.height(8.dp))
 
-		// Action buttons.
 		Column(
 			modifier = Modifier.fillMaxWidth(),
 			verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -397,9 +412,7 @@ private fun TranscriptCard(
 			containerColor = MaterialTheme.customColors.taskCardBgColor,
 		),
 	) {
-		Column(
-			modifier = Modifier.padding(16.dp),
-		) {
+		Column(modifier = Modifier.padding(16.dp)) {
 			Text(
 				"Transcript",
 				style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
@@ -425,9 +438,7 @@ private fun SummaryCard(summary: String) {
 			containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
 		),
 	) {
-		Column(
-			modifier = Modifier.padding(16.dp),
-		) {
+		Column(modifier = Modifier.padding(16.dp)) {
 			Text(
 				"Summary",
 				style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),

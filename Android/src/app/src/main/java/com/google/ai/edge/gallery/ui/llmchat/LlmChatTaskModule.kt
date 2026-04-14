@@ -313,6 +313,7 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
     val audioScribeViewModel: AudioScribeViewModel = hiltViewModel()
     AudioScribeScreen(
       viewModel = audioScribeViewModel,
+      modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
     )
   }
