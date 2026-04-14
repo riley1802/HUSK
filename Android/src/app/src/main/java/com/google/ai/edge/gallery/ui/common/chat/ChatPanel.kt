@@ -88,6 +88,8 @@ import androidx.compose.ui.unit.sp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.rag.ChunkResult
+import com.google.ai.edge.gallery.ui.knowledgebase.SourceAttribution
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.AudioAnimation
 import com.google.ai.edge.gallery.ui.common.ErrorDialog
@@ -95,6 +97,7 @@ import com.google.ai.edge.gallery.ui.common.FloatingBanner
 import com.google.ai.edge.gallery.ui.common.RotationalLoader
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.chatDisplayConfig
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.delay
 
@@ -279,10 +282,11 @@ fun ChatPanel(
         ) {
           itemsIndexed(messages) { index, message ->
             val imageHistoryCurIndex = remember { mutableIntStateOf(0) }
+            val displayConfig = MaterialTheme.chatDisplayConfig
             var hAlign: Alignment.Horizontal = Alignment.End
             var backgroundColor: Color = MaterialTheme.customColors.userBubbleBgColor
             var hardCornerAtLeftOrRight = false
-            var extraPaddingStart = 48.dp
+            var extraPaddingStart = displayConfig.bubbleAlignmentPad
             var extraPaddingEnd = 0.dp
             if (message.side == ChatSide.AGENT) {
               hAlign = Alignment.Start
@@ -294,7 +298,7 @@ fun ChatPanel(
                   message.type !== ChatMessageType.WEBVIEW &&
                   message.type !== ChatMessageType.COLLAPSABLE_PROGRESS_PANEL
               ) {
-                extraPaddingEnd = 48.dp
+                extraPaddingEnd = displayConfig.bubbleAlignmentPad
               }
             } else if (message.side == ChatSide.SYSTEM) {
               extraPaddingStart = 24.dp
@@ -315,8 +319,8 @@ fun ChatPanel(
                   .padding(
                     start = 12.dp + extraPaddingStart,
                     end = 12.dp + extraPaddingEnd,
-                    top = 6.dp,
-                    bottom = 6.dp,
+                    top = displayConfig.bubbleSpacingVertical,
+                    bottom = displayConfig.bubbleSpacingVertical,
                   ),
               horizontalAlignment = hAlign,
             ) messageColumn@{
@@ -438,6 +442,15 @@ fun ChatPanel(
                         )
 
                       else -> {}
+                    }
+                  }
+
+                  // RAG source attribution below agent text messages.
+                  if (message is ChatMessageText && message.side == ChatSide.AGENT) {
+                    val ragChunks = message.data as? List<*>
+                    if (ragChunks != null && ragChunks.isNotEmpty() && ragChunks.first() is ChunkResult) {
+                      @Suppress("UNCHECKED_CAST")
+                      SourceAttribution(chunks = ragChunks as List<ChunkResult>)
                     }
                   }
 
