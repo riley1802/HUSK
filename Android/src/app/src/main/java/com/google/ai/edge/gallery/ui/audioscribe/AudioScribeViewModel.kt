@@ -40,7 +40,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class AudioScribeUiState(
-	val selectedWhisperModel: String = "small",
+	val selectedWhisperModel: String = "base",
 	val whisperModelReady: Boolean = false,
 	val speakerProfiles: List<SpeakerProfile> = emptyList(),
 	val isInitializing: Boolean = false,

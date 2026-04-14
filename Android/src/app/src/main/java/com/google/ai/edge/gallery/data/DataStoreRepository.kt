@@ -556,7 +556,7 @@ class DefaultDataStoreRepository(
 
   override fun readWhisperSelectedModel(): String {
     val stored = runBlocking { dataStore.data.first().whisperSelectedModel }
-    return stored.ifBlank { "small" }
+    return stored.ifBlank { "base" }
   }
 
   override fun saveWhisperSelectedModel(modelKey: String) {
