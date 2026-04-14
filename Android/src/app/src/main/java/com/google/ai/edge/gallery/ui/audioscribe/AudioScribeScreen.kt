@@ -99,18 +99,22 @@ fun AudioScribeScreen(
 	var selectedTab by remember { mutableIntStateOf(0) }
 
 	// Find models.
-	val gemmaE4b = remember(modelManagerViewModel) {
-		modelManagerViewModel?.let { viewModel.findGemmaE4b(it.getAllModels()) }
+	val allModels = remember(modelManagerViewModel) {
+		modelManagerViewModel?.getAllModels() ?: emptyList()
+	}
+	val gemmaE4b = remember(allModels) { viewModel.findGemmaE4b(allModels) }
+	val whisperModel = remember(allModels, uiState.selectedWhisperModel) { viewModel.findWhisperModel(allModels) }
+
+	// Auto-initialize Whisper when entering the screen or changing model.
+	LaunchedEffect(uiState.selectedWhisperModel, whisperModel) {
+		if (!uiState.whisperModelReady && !uiState.isInitializing && whisperModel != null) {
+			viewModel.initializeWhisperFromModel(context, whisperModel)
+		}
 	}
 
-	// Auto-initialize Whisper when entering the screen.
-	LaunchedEffect(uiState.selectedWhisperModel, modelManagerViewModel) {
-		if (!uiState.whisperModelReady && !uiState.isInitializing && modelManagerViewModel != null) {
-			val whisperModel = viewModel.findWhisperModel(modelManagerViewModel.getAllModels())
-			if (whisperModel != null) {
-				viewModel.initializeWhisperFromModel(context, whisperModel)
-			}
-		}
+	// Check if Whisper model needs downloading.
+	val whisperNeedsDownload = remember(whisperModel, uiState.whisperModelReady, uiState.error) {
+		uiState.error?.contains("not downloaded") == true || (whisperModel != null && !uiState.whisperModelReady && !uiState.isInitializing)
 	}
 
 	var labelingSegment by remember { mutableStateOf<TranscriptSegment?>(null) }
@@ -195,6 +199,7 @@ fun AudioScribeScreen(
 			when (selectedTab) {
 				0 -> ScribeTab(
 					uiState = uiState,
+					whisperNeedsDownload = whisperNeedsDownload,
 					onPickFile = {
 						val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
 							addCategory(Intent.CATEGORY_OPENABLE)
@@ -206,7 +211,15 @@ fun AudioScribeScreen(
 						}
 						filePicker.launch(intent)
 					},
-					onModelSelected = { viewModel.selectWhisperModel(it) },
+					onDownloadWhisper = {
+						if (whisperModel != null && modelManagerViewModel != null) {
+							val task = modelManagerViewModel.getTaskById(com.google.ai.edge.gallery.data.BuiltInTaskId.LLM_ASK_AUDIO)
+							modelManagerViewModel.downloadModel(task, whisperModel)
+						}
+					},
+					onModelSelected = { key ->
+						viewModel.selectWhisperModel(key)
+					},
 					onUnknownSpeakerClicked = { labelingSegment = it },
 				)
 				1 -> HistoryTab(
@@ -239,7 +252,9 @@ fun AudioScribeScreen(
 @Composable
 private fun ScribeTab(
 	uiState: AudioScribeUiState,
+	whisperNeedsDownload: Boolean,
 	onPickFile: () -> Unit,
+	onDownloadWhisper: () -> Unit,
 	onModelSelected: (String) -> Unit,
 	onUnknownSpeakerClicked: (TranscriptSegment) -> Unit,
 ) {
@@ -255,18 +270,22 @@ private fun ScribeTab(
 			selectedModel = uiState.selectedWhisperModel,
 			isReady = uiState.whisperModelReady,
 			isInitializing = uiState.isInitializing,
+			needsDownload = whisperNeedsDownload,
 			onModelSelected = onModelSelected,
+			onDownload = onDownloadWhisper,
 		)
 
 		Spacer(modifier = Modifier.height(8.dp))
 
 		uiState.error?.let { error ->
-			Text(
-				error,
-				style = MaterialTheme.typography.bodySmall,
-				color = MaterialTheme.colorScheme.error,
-				modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-			)
+			if (!error.contains("not downloaded")) {
+				Text(
+					error,
+					style = MaterialTheme.typography.bodySmall,
+					color = MaterialTheme.colorScheme.error,
+					modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+				)
+			}
 		}
 
 		when {
@@ -284,7 +303,10 @@ private fun ScribeTab(
 					SummaryCard(summary = summary)
 				}
 			}
-			else -> EmptyState(onPickFile = onPickFile)
+			else -> EmptyState(
+				onPickFile = onPickFile,
+				whisperReady = uiState.whisperModelReady,
+			)
 		}
 
 		Spacer(modifier = Modifier.height(24.dp))
@@ -435,7 +457,9 @@ private fun WhisperConfigCard(
 	selectedModel: String,
 	isReady: Boolean,
 	isInitializing: Boolean,
+	needsDownload: Boolean,
 	onModelSelected: (String) -> Unit,
+	onDownload: () -> Unit,
 ) {
 	val options = remember {
 		listOf(
@@ -475,6 +499,8 @@ private fun WhisperConfigCard(
 						Text("Loading...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
 					} else if (isReady) {
 						Text("Ready", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+					} else if (needsDownload) {
+						Text("Not downloaded", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
 					}
 				}
 				WhisperModelSelector(
@@ -483,12 +509,22 @@ private fun WhisperConfigCard(
 					onSelected = onModelSelected,
 				)
 			}
+			if (needsDownload && !isInitializing) {
+				Spacer(modifier = Modifier.height(8.dp))
+				OutlinedButton(
+					onClick = onDownload,
+					modifier = Modifier.fillMaxWidth(),
+					shape = RoundedCornerShape(12.dp),
+				) {
+					Text("Download Whisper ${selectedModel.replaceFirstChar { it.uppercase() }} model")
+				}
+			}
 		}
 	}
 }
 
 @Composable
-private fun EmptyState(onPickFile: () -> Unit) {
+private fun EmptyState(onPickFile: () -> Unit, whisperReady: Boolean = false) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -524,9 +560,10 @@ private fun EmptyState(onPickFile: () -> Unit) {
 			onClick = onPickFile,
 			modifier = Modifier.fillMaxWidth(),
 			shape = RoundedCornerShape(16.dp),
+			enabled = whisperReady,
 		) {
 			Icon(Icons.Outlined.AudioFile, contentDescription = null, modifier = Modifier.size(20.dp))
-			Text("  Pick audio or video file")
+			Text(if (whisperReady) "  Pick audio or video file" else "  Download Whisper model first")
 		}
 	}
 }
