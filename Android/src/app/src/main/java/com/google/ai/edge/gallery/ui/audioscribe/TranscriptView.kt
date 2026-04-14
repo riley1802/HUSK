@@ -47,12 +47,13 @@ import kotlin.math.absoluteValue
 @Composable
 fun TranscriptView(
 	segments: List<TranscriptSegment>,
+	modifier: Modifier = Modifier,
 	onUnknownSpeakerClicked: ((TranscriptSegment) -> Unit)? = null,
 ) {
 	var showFullText by remember { mutableStateOf(false) }
 
 	Column(
-		modifier = Modifier.fillMaxWidth(),
+		modifier = modifier.fillMaxWidth(),
 		verticalArrangement = Arrangement.spacedBy(2.dp),
 	) {
 		// Toggle between structured and full text view.

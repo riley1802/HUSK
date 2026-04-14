@@ -29,6 +29,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.audioscribe.TranscriptSegment
+import com.google.ai.edge.gallery.ui.audioscribe.TranscriptView
 import com.google.ai.edge.gallery.ui.common.MarkdownText
 import com.google.ai.edge.gallery.ui.theme.chatDisplayConfig
 
@@ -37,6 +39,21 @@ import com.google.ai.edge.gallery.ui.theme.chatDisplayConfig
 fun MessageBodyText(message: ChatMessageText, inProgress: Boolean) {
 	val config = MaterialTheme.chatDisplayConfig
 	val innerPadding = config.bubblePaddingInner
+
+	// Check if this is a Whisper transcript message.
+	val transcriptSegments = if (message.side == ChatSide.AGENT) {
+		TranscriptSegment.fromJson(message.content)
+	} else {
+		null
+	}
+
+	if (transcriptSegments != null) {
+		TranscriptView(
+			segments = transcriptSegments,
+			modifier = Modifier.padding(innerPadding),
+		)
+		return
+	}
 
 	SelectionContainer {
 		if (message.side == ChatSide.USER) {
