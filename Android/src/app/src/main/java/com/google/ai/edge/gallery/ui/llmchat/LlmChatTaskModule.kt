@@ -97,6 +97,10 @@ class LlmChatTask(
       appendLine("- When you learn important info, save it with saveMemory. Promote only the most critical to L1.")
       appendLine("- Before asking the user for info, search L2 first — you may already know the answer.")
       appendLine("- When you need live external data (GitHub, web, etc.), use mcpTool to fetch it.")
+      appendLine()
+      appendLine("Formatting rules:")
+      appendLine("- Do NOT use LaTeX notation ($, \\sin, \\times, etc.). Use plain text and Unicode symbols instead (×, ÷, √, π).")
+      appendLine("- Use Markdown for formatting (bold, code blocks, lists).")
     }
     return Contents.of(listOf(Content.Text(systemPrompt)))
   }

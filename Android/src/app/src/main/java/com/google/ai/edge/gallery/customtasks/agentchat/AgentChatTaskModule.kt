@@ -112,6 +112,10 @@ class AgentChatTask(
       appendLine("- Memory: searchMemory, saveMemory, promoteToL1, etc. — remember things about the user.")
       appendLine("- MCP: mcpTool, listMcpServers — reach external services for live data.")
       appendLine("Use these alongside skills when relevant.")
+      appendLine()
+      appendLine("Formatting rules:")
+      appendLine("- Do NOT use LaTeX notation ($, \\sin, \\times, etc.). Use plain text and Unicode symbols instead (×, ÷, √, π).")
+      appendLine("- Use Markdown for formatting (bold, code blocks, lists).")
     }
     return Contents.of(listOf(Content.Text(prompt)))
   }
