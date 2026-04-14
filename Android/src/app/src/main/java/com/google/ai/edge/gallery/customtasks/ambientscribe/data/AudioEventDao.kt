@@ -28,11 +28,17 @@ interface AudioEventDao {
 	@Query("SELECT * FROM audio_events WHERE date = :date ORDER BY timestamp ASC")
 	fun observeByDate(date: LocalDate): Flow<List<AudioEvent>>
 
-	@Query("SELECT * FROM audio_events WHERE rewriteState = 'PENDING' AND date = :date")
-	suspend fun getPendingEvents(date: LocalDate): List<AudioEvent>
+	@Query("SELECT * FROM audio_events WHERE rewriteState = :state AND date = :date ORDER BY timestamp ASC")
+	suspend fun getByState(state: RewriteState, date: LocalDate): List<AudioEvent>
 
-	@Query("SELECT * FROM audio_events WHERE rewriteState = 'PENDING'")
-	suspend fun getAllPendingEvents(): List<AudioEvent>
+	@Query("SELECT * FROM audio_events WHERE rewriteState = :state ORDER BY timestamp ASC")
+	suspend fun getAllByState(state: RewriteState): List<AudioEvent>
+
+	suspend fun getPendingEvents(date: LocalDate): List<AudioEvent> =
+		getByState(RewriteState.PENDING, date)
+
+	suspend fun getAllPendingEvents(): List<AudioEvent> =
+		getAllByState(RewriteState.PENDING)
 
 	@Query("UPDATE audio_events SET naturalDescription = :description, rewriteState = :state WHERE id = :id")
 	suspend fun updateRewrite(id: Long, description: String, state: RewriteState)

@@ -11,7 +11,6 @@
 package com.google.ai.edge.gallery.customtasks.ambientscribe.data
 
 import androidx.room.Dao
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
 import java.time.LocalDate

@@ -14,8 +14,6 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.time.LocalDate
 
-enum class RewriteState { PENDING, DONE, SKIPPED_LOW_CONF }
-
 @Entity(tableName = "audio_events")
 data class AudioEvent(
 	@PrimaryKey(autoGenerate = true)
