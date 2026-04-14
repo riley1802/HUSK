@@ -46,6 +46,17 @@ android {
     manifestPlaceholders["applicationName"] = "com.google.ai.edge.gallery.GalleryApplication"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    ndk {
+      abiFilters += "arm64-v8a"
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path = file("src/main/cpp/CMakeLists.txt")
+      version = "3.22.1"
+    }
   }
 
   buildTypes {
