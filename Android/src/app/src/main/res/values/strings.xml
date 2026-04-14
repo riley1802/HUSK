@@ -32,7 +32,7 @@
   <string name="askimage_emptystate_title" translatable="false">Look</string>
   <string name="askimage_emptystate_content" translatable="false">Tap the + below to add an image (max 10 images per chat) and type a prompt to ask Husk about it.</string>
   <string name="askimage_emptystate_content_aicore" translatable="false">Tap the + below to add an image (max 1 image per chat) and type a prompt to ask Husk about it.</string>
-  <string name="askaudio_emptystate_title" translatable="false">Listen</string>
+  <string name="askaudio_emptystate_title" translatable="false">Audio Scribe</string>
   <string name="askaudio_emptystate_content" translatable="false">Tap the + below to pick an audio or video file, or record a clip. Supports M4A, MP3, MP4, and more.</string>
   <string name="gallery_news_notification_title" translatable="false">Husk</string>
   <string name="baseline" translatable="false">Baseline</string>

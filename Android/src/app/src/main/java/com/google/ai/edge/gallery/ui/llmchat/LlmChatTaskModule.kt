@@ -268,7 +268,7 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
   override val task: Task =
     Task(
       id = BuiltInTaskId.LLM_ASK_AUDIO,
-      label = "Listen",
+      label = "Audio Scribe",
       category = Category.LLM,
       icon = Icons.Outlined.Mic,
       models = mutableListOf(),
