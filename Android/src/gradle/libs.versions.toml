@@ -43,6 +43,7 @@ room = "2.7.1"
 androidxTestRunner = "1.5.2"
 androidxTestCoreKtx = "1.5.0"
 mockitoCore = "5.14.2"
+kotlinxCoroutines = "1.8.1"
 onnxruntime = "1.20.0"
 mlkit-genai-prompt = "1.0.0-beta2"  # Ref: https://developers.google.com/ml-kit/genai/prompt/android/get-started#configure-project
 
@@ -70,6 +71,8 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", ve
 androidx-datastore = { group = "androidx.datastore", name = "datastore", version.ref = "dataStore" }
 com-google-code-gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleProcess" }
+androidx-lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycleRuntimeKtx" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit"}
 litertlm = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
 commonmark = { group = "com.halilibo.compose-richtext", name = "richtext-commonmark", version.ref = "commonmark" }
