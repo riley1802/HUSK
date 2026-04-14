@@ -92,16 +92,21 @@ class MoonshineTfliteEngine(
 			val options = InterpreterApi.Options()
 				.setRuntime(InterpreterApi.Options.TfLiteRuntime.FROM_SYSTEM_ONLY)
 
-			val enc: InterpreterApi
-			val dec: InterpreterApi
-			try {
-				enc = InterpreterApi.create(encoderBuffer, options)
-				dec = InterpreterApi.create(decoderBuffer, options)
+			val enc: InterpreterApi = try {
+				InterpreterApi.create(encoderBuffer, options)
 			} catch (t: Throwable) {
-				Log.w(TAG, "Failed to create TFLite interpreters; engine remains not-ready", t)
+				Log.w(TAG, "Failed to create encoder interpreter; engine remains not-ready", t)
+				return
+			}
+			val dec: InterpreterApi = try {
+				InterpreterApi.create(decoderBuffer, options)
+			} catch (t: Throwable) {
+				enc.close()
+				Log.w(TAG, "Decoder interpreter creation failed; closed encoder, engine remains not-ready", t)
 				return
 			}
 
+			// Only assign to fields after both interpreters succeeded.
 			encoderModelBuffer = encoderBuffer
 			decoderModelBuffer = decoderBuffer
 			tokenizerBytes = tokenizer
@@ -140,9 +145,10 @@ class MoonshineTfliteEngine(
 	override fun isReady(): Boolean = ready
 
 	override suspend fun transcribe(samples: FloatArray, languageHint: String): TranscriptionResult {
-		// 1. Argument validation first — a programming error (wrong-sized buffer) is worse than
-		//    a not-ready error, and validating up-front lets tests exercise the contract without
-		//    needing a real model loaded.
+		// Argument validation runs synchronously on the caller's dispatcher — a programming
+		// error (wrong-sized buffer) is worse than a not-ready error, and keeping these out
+		// of the withContext block ensures IllegalArgumentException is thrown on the caller's
+		// thread rather than hopped to Dispatchers.Default.
 		require(samples.size >= MIN_SAMPLES) {
 			"samples too short: ${samples.size} (minimum $MIN_SAMPLES at 16kHz = 0.1s)"
 		}
@@ -150,61 +156,52 @@ class MoonshineTfliteEngine(
 			"samples too long: ${samples.size} (maximum $MAX_SAMPLES at 16kHz = 30s)"
 		}
 
-		// 2. Readiness gate.
-		if (!ready) {
-			throw EngineNotReadyException("Moonshine model not loaded")
-		}
+		return withContext(Dispatchers.Default) {
+			// Readiness gate.
+			if (!ready) {
+				throw EngineNotReadyException("Moonshine model not loaded")
+			}
 
-		val paddedBuffer = paddedInputBuffer
-			?: throw EngineNotReadyException("Moonshine model not loaded")
-		val enc = encoder ?: throw EngineNotReadyException("Moonshine model not loaded")
-		@Suppress("UNUSED_VARIABLE")
-		val dec = decoder ?: throw EngineNotReadyException("Moonshine model not loaded")
+			val paddedBuffer = paddedInputBuffer
+				?: throw EngineNotReadyException("Moonshine model not loaded")
+			val enc = encoder ?: throw EngineNotReadyException("Moonshine model not loaded")
 
-		// 3. Zero-pad to the 30s max-buffer length used by the TFLite port.
-		paddedBuffer.clear()
-		val floatView = paddedBuffer.asFloatBuffer()
-		floatView.put(samples)
-		// Remaining floats are already zero from the fresh ByteBuffer allocation; explicitly
-		// zero them on subsequent calls to avoid leaking previous audio into padding.
-		val remaining = MAX_SAMPLES - samples.size
-		if (remaining > 0) {
-			val zeros = FloatArray(remaining)
-			floatView.put(zeros)
-		}
-		paddedBuffer.rewind()
+			// Zero-pad to the 30s max-buffer length used by the TFLite port.
+			paddedBuffer.clear()
+			val floatView = paddedBuffer.asFloatBuffer()
+			floatView.put(samples)
+			// Remaining floats are already zero from the fresh ByteBuffer allocation; explicitly
+			// zero them on subsequent calls to avoid leaking previous audio into padding.
+			val remaining = MAX_SAMPLES - samples.size
+			if (remaining > 0) {
+				val zeros = FloatArray(remaining)
+				floatView.put(zeros)
+			}
+			paddedBuffer.rewind()
 
-		val startNs = System.nanoTime()
+			val startNs = System.nanoTime()
 
-		// 4. Run the encoder. The actual output tensor shape depends on the Moonshine
-		//    TFLite export; we allocate a conservative placeholder and let the runtime
-		//    throw if the shape doesn't match, which surfaces a clear signal once the
-		//    real model is bundled. Until the model is bundled this branch is exercised
-		//    only through integration tests.
-		try {
-			// Note: the real invocation needs the output tensor allocated to the model's
-			//       declared shape. We deliberately keep this as-is so it will fail loudly
-			//       once a real model is dropped in but tokenizer integration is still
-			//       missing, rather than silently producing bogus data.
+			// Run the encoder. The real invocation needs the output tensor allocated to the
+			// model's declared shape; we deliberately keep the placeholder in runEncoder() so
+			// it fails loudly once a real model is dropped in but tokenizer integration is
+			// still missing, rather than silently producing bogus data. Any runtime
+			// shape/allocation error propagates to the caller as a fatal engine failure.
 			@Suppress("UNUSED_VARIABLE")
 			val encoderOutputs = runEncoder(enc, paddedBuffer)
-		} catch (t: Throwable) {
-			// Surface any runtime shape/allocation error; callers should treat this as a
-			// fatal engine failure.
-			throw t
+
+			// Decoder loop — pending the Moonshine tokenizer (.spm) integration. Structure is
+			// present so bundling the real tokenizer + running the loop is a drop-in
+			// replacement of `decode()` below. The decoder interpreter null check belongs
+			// inside `decode()` once it is real.
+			val decodedText = decode()
+
+			val durationMs = (System.nanoTime() - startNs) / 1_000_000L
+			TranscriptionResult(
+				text = decodedText,
+				confidence = Float.NaN,
+				durationMs = durationMs,
+			)
 		}
-
-		// 5. Decoder loop — pending the Moonshine tokenizer (.spm) integration.
-		//    Structure is present so bundling the real tokenizer + running the loop is
-		//    a drop-in replacement of `decode()` below.
-		val decodedText = decode()
-
-		val durationMs = (System.nanoTime() - startNs) / 1_000_000L
-		return TranscriptionResult(
-			text = decodedText,
-			confidence = 0f,
-			durationMs = durationMs,
-		)
 	}
 
 	/**

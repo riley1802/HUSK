@@ -21,7 +21,12 @@ interface TranscriptionEngine {
 	/** Initializes the engine. Safe to call multiple times; subsequent calls no-op if already ready. */
 	suspend fun initialize()
 
-	/** Releases native resources. After close(), isReady() returns false. */
+	/**
+	 * Releases native resources. After close(), isReady() returns false.
+	 *
+	 * Callers must ensure no transcribe() call is in flight when close() is invoked. The
+	 * foreground service serializes these by construction.
+	 */
 	suspend fun close()
 
 	/** True iff initialize() completed successfully and the engine can transcribe. */
@@ -29,6 +34,9 @@ interface TranscriptionEngine {
 
 	/**
 	 * Transcribes the given 16kHz mono PCM float samples (range [-1.0, 1.0]).
+	 *
+	 * Not safe to invoke concurrently with close() — callers must serialize lifecycle
+	 * transitions.
 	 *
 	 * @param samples raw audio — caller guarantees exactly 16kHz mono
 	 * @param languageHint ISO 639-1 code, ignored if the engine doesn't support language hints
@@ -43,7 +51,7 @@ interface TranscriptionEngine {
  * Result of a successful transcription call.
  *
  * @property text decoded transcript text (may be empty if the model produced no tokens)
- * @property confidence engine-specific confidence estimate in the range [0.0, 1.0]
+ * @property confidence 0.0..1.0; Float.NaN if the engine cannot provide a confidence estimate
  * @property durationMs wall-clock inference time, measured around the native call
  */
 data class TranscriptionResult(

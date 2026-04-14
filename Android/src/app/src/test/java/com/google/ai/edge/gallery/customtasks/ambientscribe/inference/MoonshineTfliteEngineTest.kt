@@ -11,12 +11,17 @@
 package com.google.ai.edge.gallery.customtasks.ambientscribe.inference
 
 import android.content.Context
+import android.content.res.AssetManager
+import java.io.FileNotFoundException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 
 /**
  * Contract-level tests for [MoonshineTfliteEngine]. These do not load a real TFLite model;
@@ -84,6 +89,40 @@ class MoonshineTfliteEngineTest {
 			engine.close()
 			engine.close()
 		}
+		assertFalse(engine.isReady())
+	}
+
+	@Test
+	fun `initialize swallows missing assets and leaves engine not-ready`() {
+		val assets = mock(AssetManager::class.java)
+		doThrow(FileNotFoundException("missing")).`when`(assets).open(anyString())
+		doThrow(FileNotFoundException("missing")).`when`(assets).openFd(anyString())
+		`when`(context.assets).thenReturn(assets)
+
+		runBlocking { engine.initialize() }
+
+		assertFalse(engine.isReady())
+		val samples = FloatArray(MoonshineTfliteEngine.MIN_SAMPLES)
+		assertThrows(EngineNotReadyException::class.java) {
+			runBlocking { engine.transcribe(samples) }
+		}
+	}
+
+	@Test
+	fun `initialize close initialize round-trip leaves engine not-ready without crashing`() {
+		val assets = mock(AssetManager::class.java)
+		doThrow(FileNotFoundException("missing")).`when`(assets).open(anyString())
+		doThrow(FileNotFoundException("missing")).`when`(assets).openFd(anyString())
+		`when`(context.assets).thenReturn(assets)
+
+		runBlocking {
+			engine.initialize()
+			engine.close()
+			engine.initialize()
+		}
+
+		// Assets are still missing, so the engine must remain not-ready — but the round-trip
+		// itself must not crash.
 		assertFalse(engine.isReady())
 	}
 }
