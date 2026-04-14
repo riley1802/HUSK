@@ -43,6 +43,7 @@ import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.memory.HotMemoryStore
+import com.google.ai.edge.gallery.data.memory.MemoryRepository
 import com.google.ai.edge.gallery.data.memory.MemoryToolSet
 import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.theme.emptyStateContent
@@ -63,8 +64,9 @@ import kotlinx.coroutines.CoroutineScope
 
 class LlmChatTask(
   private val hotMemoryStore: HotMemoryStore,
+  private val memoryRepository: MemoryRepository,
 ) : CustomTask {
-  private val memoryToolSet = MemoryToolSet(hotMemoryStore)
+  private val memoryToolSet = MemoryToolSet(hotMemoryStore, memoryRepository)
 
   override val task: Task =
     Task(
@@ -87,11 +89,11 @@ class LlmChatTask(
       appendLine(memoryBlock)
       appendLine()
       appendLine("You have memory tools available. Use them proactively:")
-      appendLine("- When you learn important information about the user, save it with promoteToL1.")
-      appendLine("- When information changes, update it with updateL1.")
-      appendLine("- When something is no longer relevant, demote it with demoteFromL1.")
-      appendLine("- Use listL1 to review what you currently remember.")
-      appendLine("Do not ask the user for information you can look up or remember.")
+      appendLine("- L1 (hot): promoteToL1, demoteFromL1, updateL1, listL1 — always-visible context.")
+      appendLine("- L2 (long-term): searchMemory, saveMemory, updateMemory, deleteMemory, listMemories — deep knowledge store.")
+      appendLine("- When you learn important info, save it with saveMemory. Promote only the most critical to L1.")
+      appendLine("- Before asking the user for info, search L2 first — you may already know the answer.")
+      appendLine("- When information changes, update it. When it's outdated, delete or demote it.")
     }
     return Contents.of(listOf(Content.Text(systemPrompt)))
   }
@@ -166,8 +168,8 @@ class LlmChatTask(
 internal object LlmChatTaskModule {
   @Provides
   @IntoSet
-  fun provideTask(hotMemoryStore: HotMemoryStore): CustomTask {
-    return LlmChatTask(hotMemoryStore)
+  fun provideTask(hotMemoryStore: HotMemoryStore, memoryRepository: MemoryRepository): CustomTask {
+    return LlmChatTask(hotMemoryStore, memoryRepository)
   }
 }
 

@@ -34,12 +34,16 @@ import com.google.ai.edge.gallery.data.DefaultDataStoreRepository
 import com.google.ai.edge.gallery.data.DefaultDownloadRepository
 import com.google.ai.edge.gallery.data.DownloadRepository
 import com.google.ai.edge.gallery.data.memory.HotMemoryStore
+import com.google.ai.edge.gallery.data.memory.MemoryDao
+import com.google.ai.edge.gallery.data.memory.MemoryDatabase
+import com.google.ai.edge.gallery.data.memory.MemoryRepository
 import com.google.ai.edge.gallery.proto.BenchmarkResults
 import com.google.ai.edge.gallery.proto.CutoutCollection
 import com.google.ai.edge.gallery.proto.HotMemory
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.Skills
 import com.google.ai.edge.gallery.proto.UserData
+import androidx.room.Room
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -178,6 +182,37 @@ internal object AppModule {
     hotMemoryDataStore: DataStore<HotMemory>,
   ): HotMemoryStore {
     return HotMemoryStore(hotMemoryDataStore)
+  }
+
+  // Provides MemoryDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideMemoryDatabase(
+    @ApplicationContext context: Context,
+  ): MemoryDatabase {
+    return Room.databaseBuilder(
+      context,
+      MemoryDatabase::class.java,
+      "husk_memory.db",
+    ).build()
+  }
+
+  // Provides MemoryDao
+  @Provides
+  @Singleton
+  fun provideMemoryDao(
+    database: MemoryDatabase,
+  ): MemoryDao {
+    return database.memoryDao()
+  }
+
+  // Provides MemoryRepository
+  @Provides
+  @Singleton
+  fun provideMemoryRepository(
+    memoryDao: MemoryDao,
+  ): MemoryRepository {
+    return MemoryRepository(memoryDao)
   }
 
   // Provides AppLifecycleProvider
