@@ -106,34 +106,23 @@ fun AudioScribeScreen(
 	val gemmaE4b = remember(allModels) { viewModel.findGemmaE4b(allModels) }
 	val whisperModel = remember(allModels, uiState.selectedWhisperModel) { viewModel.findWhisperModel(allModels) }
 
-	// Auto-download all 3 Whisper models on screen entry (skips already-downloaded).
-	LaunchedEffect(allModels) {
-		if (modelManagerViewModel != null && allModels.isNotEmpty()) {
-			val task = modelManagerViewModel.getTaskById(com.google.ai.edge.gallery.data.BuiltInTaskId.LLM_ASK_AUDIO)
-			val whisperNames = listOf("Whisper-Tiny", "Whisper-Base", "Whisper-Small")
-			for (model in allModels) {
-				if (model.name in whisperNames) {
-					val path = model.getPath(context)
-					val file = java.io.File(path)
-					Log.d(TAG, "Checking ${model.name}: path=$path exists=${file.exists()}")
-					if (!file.exists()) {
-						Log.d(TAG, "Auto-downloading ${model.name} from ${model.url}")
-						modelManagerViewModel.downloadModel(task, model)
-					} else {
-						Log.d(TAG, "${model.name} already downloaded")
-					}
-				}
-			}
-		} else {
-			Log.d(TAG, "No models available yet (count=${allModels.size})")
-		}
+	// Find all Whisper models for the download cards.
+	val whisperModels = remember(allModels) {
+		allModels.filter { it.name.startsWith("Whisper-") }
+	}
+	val audioTask = remember(modelManagerViewModel) {
+		modelManagerViewModel?.getTaskById(com.google.ai.edge.gallery.data.BuiltInTaskId.LLM_ASK_AUDIO)
 	}
 
-	// Auto-initialize selected Whisper model when available.
-	// Re-check periodically in case download just completed.
-	LaunchedEffect(uiState.selectedWhisperModel, whisperModel) {
+	// Auto-initialize selected Whisper model when its download completes.
+	val selectedDownloadStatus = whisperModel?.let {
+		modelManagerUiState?.value?.modelDownloadStatus?.get(it.name)
+	}
+	LaunchedEffect(uiState.selectedWhisperModel, selectedDownloadStatus?.status) {
 		if (!uiState.whisperModelReady && !uiState.isInitializing && whisperModel != null) {
-			viewModel.initializeWhisperFromModel(context, whisperModel)
+			if (selectedDownloadStatus?.status == com.google.ai.edge.gallery.data.ModelDownloadStatusType.SUCCEEDED) {
+				viewModel.initializeWhisperFromModel(context, whisperModel)
+			}
 		}
 	}
 
@@ -219,6 +208,10 @@ fun AudioScribeScreen(
 			when (selectedTab) {
 				0 -> ScribeTab(
 					uiState = uiState,
+					whisperModels = whisperModels,
+					audioTask = audioTask,
+					modelManagerViewModel = modelManagerViewModel,
+					modelManagerUiState = modelManagerUiState?.value,
 					onPickFile = {
 						val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
 							addCategory(Intent.CATEGORY_OPENABLE)
@@ -265,6 +258,10 @@ fun AudioScribeScreen(
 @Composable
 private fun ScribeTab(
 	uiState: AudioScribeUiState,
+	whisperModels: List<com.google.ai.edge.gallery.data.Model>,
+	audioTask: com.google.ai.edge.gallery.data.Task?,
+	modelManagerViewModel: ModelManagerViewModel?,
+	modelManagerUiState: com.google.ai.edge.gallery.ui.modelmanager.ModelManagerUiState?,
 	onPickFile: () -> Unit,
 	onModelSelected: (String) -> Unit,
 	onUnknownSpeakerClicked: (TranscriptSegment) -> Unit,
@@ -276,23 +273,41 @@ private fun ScribeTab(
 			.fillMaxSize()
 			.verticalScroll(scrollState),
 	) {
-		// Whisper model selector.
-		WhisperConfigCard(
-			selectedModel = uiState.selectedWhisperModel,
-			isReady = uiState.whisperModelReady,
-			isInitializing = uiState.isInitializing,
-			onModelSelected = onModelSelected,
-		)
+		// Whisper model cards.
+		if (whisperModels.isNotEmpty() && modelManagerViewModel != null) {
+			Text(
+				"Whisper Models",
+				style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+				color = MaterialTheme.colorScheme.onSurface,
+				modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+			)
+			whisperModels.forEach { model ->
+				val downloadStatus = modelManagerUiState?.modelDownloadStatus?.get(model.name)
+				val isSelected = uiState.selectedWhisperModel == model.name.removePrefix("Whisper-").lowercase()
+				WhisperModelCard(
+					model = model,
+					task = audioTask,
+					downloadStatus = downloadStatus,
+					isSelected = isSelected,
+					modelManagerViewModel = modelManagerViewModel,
+					onSelect = {
+						onModelSelected(model.name.removePrefix("Whisper-").lowercase())
+					},
+				)
+			}
+		}
 
 		Spacer(modifier = Modifier.height(8.dp))
 
 		uiState.error?.let { error ->
-			Text(
-				error,
-				style = MaterialTheme.typography.bodySmall,
-				color = MaterialTheme.colorScheme.error,
-				modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-			)
+			if (!error.contains("not downloaded")) {
+				Text(
+					error,
+					style = MaterialTheme.typography.bodySmall,
+					color = MaterialTheme.colorScheme.error,
+					modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+				)
+			}
 		}
 
 		when {
@@ -460,58 +475,90 @@ private fun TranscriptionHistoryItem(
 }
 
 @Composable
-private fun WhisperConfigCard(
-	selectedModel: String,
-	isReady: Boolean,
-	isInitializing: Boolean,
-	onModelSelected: (String) -> Unit,
+private fun WhisperModelCard(
+	model: com.google.ai.edge.gallery.data.Model,
+	task: com.google.ai.edge.gallery.data.Task?,
+	downloadStatus: com.google.ai.edge.gallery.data.ModelDownloadStatus?,
+	isSelected: Boolean,
+	modelManagerViewModel: ModelManagerViewModel,
+	onSelect: () -> Unit,
 ) {
-	val options = remember {
-		listOf(
-			WhisperModelOption("tiny", "Tiny", true),
-			WhisperModelOption("base", "Base", true),
-			WhisperModelOption("small", "Small", true),
-		)
+	val isDownloaded = downloadStatus?.status == com.google.ai.edge.gallery.data.ModelDownloadStatusType.SUCCEEDED
+	val sizeText = remember(model.sizeInBytes) {
+		when {
+			model.sizeInBytes > 1_000_000_000 -> "%.1f GB".format(model.sizeInBytes / 1_000_000_000.0)
+			model.sizeInBytes > 1_000_000 -> "%.0f MB".format(model.sizeInBytes / 1_000_000.0)
+			else -> "${model.sizeInBytes / 1000} KB"
+		}
 	}
 
 	Card(
 		modifier = Modifier
 			.fillMaxWidth()
-			.padding(horizontal = 16.dp, vertical = 4.dp),
+			.padding(horizontal = 16.dp, vertical = 4.dp)
+			.then(
+				if (isSelected && isDownloaded) Modifier.background(
+					MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
+					RoundedCornerShape(16.dp),
+				) else Modifier
+			),
 		shape = RoundedCornerShape(16.dp),
 		colors = CardDefaults.cardColors(
-			containerColor = MaterialTheme.customColors.taskCardBgColor,
+			containerColor = if (isSelected && isDownloaded) {
+				MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+			} else {
+				MaterialTheme.customColors.taskCardBgColor
+			},
 		),
 	) {
-		Row(
-			modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			horizontalArrangement = Arrangement.SpaceBetween,
+		Column(
+			modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
 		) {
-			Row(verticalAlignment = Alignment.CenterVertically) {
-				Text(
-					"Whisper",
-					style = MaterialTheme.typography.labelLarge,
-					color = MaterialTheme.colorScheme.onSurface,
-				)
-				Spacer(modifier = Modifier.width(8.dp))
-				if (isInitializing) {
-					CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-					Spacer(modifier = Modifier.width(4.dp))
-					Text("Loading...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-				} else if (isReady) {
-					Text("Ready", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-				} else {
-					CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-					Spacer(modifier = Modifier.width(4.dp))
-					Text("Downloading...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+			Row(
+				modifier = Modifier.fillMaxWidth(),
+				verticalAlignment = Alignment.CenterVertically,
+				horizontalArrangement = Arrangement.SpaceBetween,
+			) {
+				Column(modifier = Modifier.weight(1f)) {
+					Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+						Text(
+							model.displayName.ifEmpty { model.name },
+							style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+							color = MaterialTheme.colorScheme.onSurface,
+						)
+						if (isSelected && isDownloaded) {
+							Text(
+								"Active",
+								style = MaterialTheme.typography.labelSmall,
+								color = MaterialTheme.colorScheme.primary,
+							)
+						}
+					}
+					Text(
+						sizeText,
+						style = MaterialTheme.typography.labelSmall,
+						color = MaterialTheme.colorScheme.outline,
+					)
+				}
+				if (isDownloaded && !isSelected) {
+					OutlinedButton(onClick = onSelect, shape = RoundedCornerShape(12.dp)) {
+						Text("Use", style = MaterialTheme.typography.labelSmall)
+					}
 				}
 			}
-			WhisperModelSelector(
-				options = options,
-				selectedKey = selectedModel,
-				onSelected = onModelSelected,
-			)
+
+			if (!isDownloaded) {
+				Spacer(modifier = Modifier.height(8.dp))
+				com.google.ai.edge.gallery.ui.common.DownloadAndTryButton(
+					task = task,
+					model = model,
+					enabled = true,
+					downloadStatus = downloadStatus,
+					modelManagerViewModel = modelManagerViewModel,
+					onClicked = { onSelect() },
+					compact = true,
+				)
+			}
 		}
 	}
 }
