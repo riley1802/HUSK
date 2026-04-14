@@ -128,6 +128,7 @@ dependencies {
   implementation(libs.localagents.rag)
   implementation(libs.mediapipe.genai)
   implementation(libs.pdfbox.android)
+  implementation(libs.coroutines.guava)
 }
 
 protobuf {

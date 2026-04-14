@@ -39,6 +39,8 @@ import com.google.ai.edge.gallery.data.memory.MemoryDao
 import com.google.ai.edge.gallery.data.memory.MemoryDatabase
 import com.google.ai.edge.gallery.data.rag.RagDao
 import com.google.ai.edge.gallery.data.rag.RagDatabase
+import com.google.ai.edge.gallery.data.rag.RagManager
+import com.google.ai.edge.gallery.data.rag.embedding.EmbeddingModelManager
 import com.google.ai.edge.gallery.data.mcp.McpManager
 import com.google.ai.edge.gallery.data.mcp.McpToolBridge
 import com.google.ai.edge.gallery.data.mcp.McpTransport
@@ -245,6 +247,17 @@ internal object AppModule {
     database: RagDatabase,
   ): RagDao {
     return database.ragDao()
+  }
+
+  // Provides RagManager
+  @Provides
+  @Singleton
+  fun provideRagManager(
+    @ApplicationContext context: Context,
+    ragDao: RagDao,
+    embeddingModelManager: EmbeddingModelManager,
+  ): RagManager {
+    return RagManager(context, ragDao, embeddingModelManager)
   }
 
   // ---- MCP Platform ----
