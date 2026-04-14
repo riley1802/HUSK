@@ -44,6 +44,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ListAlt
 import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -125,6 +126,7 @@ fun HomeScreen(
   tosViewModel: TosViewModel,
   navigateToTaskScreen: (Task) -> Unit,
   onModelsClicked: () -> Unit,
+  onKnowledgeBaseClicked: () -> Unit = {},
   enableAnimation: Boolean,
   modifier: Modifier = Modifier,
 ) {
@@ -240,6 +242,32 @@ fun HomeScreen(
                         )
                     ),
                 )
+              }
+              Spacer(modifier = Modifier.height(16.dp))
+              Row(modifier = Modifier.fillMaxWidth()) {
+                SquareDrawerItem(
+                  label = "Knowledge Base",
+                  description = "Manage documents",
+                  icon = Icons.AutoMirrored.Rounded.MenuBook,
+                  onClick = {
+                    scope.launch { drawerState.close() }
+                    scope.launch {
+                      delay(50)
+                      onKnowledgeBaseClicked()
+                    }
+                  },
+                  modifier = Modifier.weight(1f),
+                  iconBrush =
+                    linearGradient(
+                      colors =
+                        listOf(
+                          MaterialTheme.customColors.taskBgGradientColors[0][0],
+                          MaterialTheme.customColors.taskBgGradientColors[0][1],
+                        )
+                    ),
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Box(modifier = Modifier.weight(1f))
               }
             }
           }
