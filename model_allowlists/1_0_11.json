@@ -204,6 +204,61 @@
       "bestForTaskTypes": [
         "llm_mobile_actions"
       ]
+    },
+    {
+      "name": "Whisper-Tiny",
+      "modelId": "ggerganov/whisper.cpp",
+      "modelFile": "ggml-tiny.bin",
+      "description": "OpenAI Whisper Tiny model for on-device speech transcription via whisper.cpp. Fastest speed, good quality. ~75MB.",
+      "sizeInBytes": 78000000,
+      "minDeviceMemoryInGb": 4,
+      "commitHash": "main",
+      "runtimeType": "whisper",
+      "taskTypes": [
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": []
+    },
+    {
+      "name": "Whisper-Base",
+      "modelId": "ggerganov/whisper.cpp",
+      "modelFile": "ggml-base.bin",
+      "description": "OpenAI Whisper Base model for on-device speech transcription via whisper.cpp. Fast speed, better quality. ~150MB.",
+      "sizeInBytes": 148000000,
+      "minDeviceMemoryInGb": 4,
+      "commitHash": "main",
+      "runtimeType": "whisper",
+      "taskTypes": [
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": []
+    },
+    {
+      "name": "Whisper-Small",
+      "modelId": "ggerganov/whisper.cpp",
+      "modelFile": "ggml-small.bin",
+      "description": "OpenAI Whisper Small model for on-device speech transcription via whisper.cpp. Best quality, moderate speed. ~500MB.",
+      "sizeInBytes": 488000000,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "main",
+      "runtimeType": "whisper",
+      "taskTypes": [
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": []
+    },
+    {
+      "name": "ECAPA-TDNN",
+      "modelId": "speechbrain/spkrec-ecapa-voxceleb",
+      "modelFile": "ecapa_tdnn.tflite",
+      "description": "Speaker embedding model for voice identification. Required for speaker diarization in Audio Scribe. ~20MB.",
+      "sizeInBytes": 20000000,
+      "minDeviceMemoryInGb": 4,
+      "commitHash": "main",
+      "taskTypes": [
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": []
     }
   ]
 }

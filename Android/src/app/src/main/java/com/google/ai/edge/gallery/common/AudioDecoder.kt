@@ -1,0 +1,262 @@
+/*
+ * Copyright 2026 Riley Thomason
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.ai.edge.gallery.common
+
+import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.net.Uri
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.floor
+
+/**
+ * Decodes any audio or video file to 16kHz mono PCM float samples
+ * using Android's native MediaExtractor + MediaCodec APIs.
+ *
+ * Supported audio formats: M4A/AAC, MP3, OGG/Vorbis, FLAC, WAV, AMR, OPUS
+ * Supported video formats (audio extraction): MP4, MKV, 3GP, WebM, MOV
+ */
+class AudioDecoder(private val context: Context) {
+
+	companion object {
+		private const val TAG = "AudioDecoder"
+		private const val TARGET_SAMPLE_RATE = 16000
+		private const val TIMEOUT_US = 10_000L
+	}
+
+	data class DecodedAudio(
+		val samples: FloatArray,
+		val sampleRate: Int,
+		val durationMs: Long,
+	)
+
+	/**
+	 * Decode audio from any supported audio/video URI to 16kHz mono float PCM.
+	 *
+	 * @param uri Content URI of the audio or video file.
+	 * @param onProgress Optional callback with progress [0.0, 1.0]. Called on the calling coroutine's dispatcher.
+	 * @return DecodedAudio with normalized float samples, or null if decoding fails.
+	 */
+	suspend fun decode(
+		uri: Uri,
+		onProgress: ((Float) -> Unit)? = null,
+	): DecodedAudio? = withContext(Dispatchers.Default) {
+		val extractor = MediaExtractor()
+		try {
+			extractor.setDataSource(context, uri, null)
+
+			// Find the first audio track.
+			val audioTrackIndex = findAudioTrack(extractor)
+			if (audioTrackIndex < 0) {
+				Log.e(TAG, "No audio track found in $uri")
+				return@withContext null
+			}
+
+			extractor.selectTrack(audioTrackIndex)
+			val format = extractor.getTrackFormat(audioTrackIndex)
+			val mime = format.getString(MediaFormat.KEY_MIME) ?: return@withContext null
+			val sourceSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+			val sourceChannels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+			val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+				format.getLong(MediaFormat.KEY_DURATION)
+			} else {
+				0L
+			}
+
+			Log.d(TAG, "Audio track: mime=$mime, sampleRate=$sourceSampleRate, channels=$sourceChannels, durationUs=$durationUs")
+
+			// Configure and start the decoder.
+			val codec = MediaCodec.createDecoderByType(mime)
+			codec.configure(format, null, null, 0)
+			codec.start()
+
+			val rawPcm = decodeLoop(extractor, codec, durationUs, onProgress)
+
+			codec.stop()
+			codec.release()
+
+			if (rawPcm.isEmpty()) {
+				Log.e(TAG, "Decoded zero samples")
+				return@withContext null
+			}
+
+			// Convert raw Int16 PCM to float, downmix to mono, resample to 16kHz.
+			val shortSamples = bytesToShorts(rawPcm)
+			val monoSamples = downmixToMono(shortSamples, sourceChannels)
+			val resampledSamples = resampleToTarget(monoSamples, sourceSampleRate)
+			val floatSamples = shortsToFloats(resampledSamples)
+
+			val durationMs = (floatSamples.size.toLong() * 1000L) / TARGET_SAMPLE_RATE
+
+			Log.d(TAG, "Decoded ${floatSamples.size} samples, duration=${durationMs}ms")
+
+			DecodedAudio(
+				samples = floatSamples,
+				sampleRate = TARGET_SAMPLE_RATE,
+				durationMs = durationMs,
+			)
+		} catch (e: Exception) {
+			Log.e(TAG, "Failed to decode audio from $uri", e)
+			null
+		} finally {
+			extractor.release()
+		}
+	}
+
+	private fun findAudioTrack(extractor: MediaExtractor): Int {
+		for (i in 0 until extractor.trackCount) {
+			val format = extractor.getTrackFormat(i)
+			val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+			if (mime.startsWith("audio/")) {
+				return i
+			}
+		}
+		return -1
+	}
+
+	private suspend fun decodeLoop(
+		extractor: MediaExtractor,
+		codec: MediaCodec,
+		durationUs: Long,
+		onProgress: ((Float) -> Unit)?,
+	): ByteArray = withContext(Dispatchers.Default) {
+		val outputChunks = mutableListOf<ByteArray>()
+		val bufferInfo = MediaCodec.BufferInfo()
+		var inputDone = false
+		var outputDone = false
+
+		while (!outputDone && isActive) {
+			// Feed input buffers.
+			if (!inputDone) {
+				val inputBufferIndex = codec.dequeueInputBuffer(TIMEOUT_US)
+				if (inputBufferIndex >= 0) {
+					val inputBuffer = codec.getInputBuffer(inputBufferIndex) ?: continue
+					val sampleSize = extractor.readSampleData(inputBuffer, 0)
+					if (sampleSize < 0) {
+						codec.queueInputBuffer(inputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+						inputDone = true
+					} else {
+						val presentationTimeUs = extractor.sampleTime
+						codec.queueInputBuffer(inputBufferIndex, 0, sampleSize, presentationTimeUs, 0)
+						extractor.advance()
+
+						// Report progress based on presentation time.
+						if (onProgress != null && durationUs > 0) {
+							val progress = (presentationTimeUs.toFloat() / durationUs).coerceIn(0f, 1f)
+							onProgress(progress)
+						}
+					}
+				}
+			}
+
+			// Drain output buffers.
+			val outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
+			when {
+				outputBufferIndex >= 0 -> {
+					if (bufferInfo.size > 0) {
+						val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
+						if (outputBuffer != null) {
+							val chunk = ByteArray(bufferInfo.size)
+							outputBuffer.position(bufferInfo.offset)
+							outputBuffer.get(chunk)
+							outputChunks.add(chunk)
+						}
+					}
+					codec.releaseOutputBuffer(outputBufferIndex, false)
+					if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+						outputDone = true
+					}
+				}
+				outputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+					val newFormat = codec.outputFormat
+					Log.d(TAG, "Output format changed: $newFormat")
+				}
+			}
+		}
+
+		onProgress?.invoke(1.0f)
+
+		// Concatenate all chunks.
+		val totalSize = outputChunks.sumOf { it.size }
+		val result = ByteArray(totalSize)
+		var offset = 0
+		for (chunk in outputChunks) {
+			System.arraycopy(chunk, 0, result, offset, chunk.size)
+			offset += chunk.size
+		}
+		result
+	}
+
+	private fun bytesToShorts(bytes: ByteArray): ShortArray {
+		val shortBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).asShortBuffer()
+		val shorts = ShortArray(shortBuffer.remaining())
+		shortBuffer.get(shorts)
+		return shorts
+	}
+
+	private fun downmixToMono(samples: ShortArray, channels: Int): ShortArray {
+		if (channels <= 1) return samples
+		val monoLength = samples.size / channels
+		val mono = ShortArray(monoLength)
+		for (i in mono.indices) {
+			var sum = 0L
+			for (ch in 0 until channels) {
+				val idx = i * channels + ch
+				if (idx < samples.size) {
+					sum += samples[idx].toLong()
+				}
+			}
+			mono[i] = (sum / channels).toInt().toShort()
+		}
+		return mono
+	}
+
+	private fun resampleToTarget(samples: ShortArray, sourceSampleRate: Int): ShortArray {
+		if (sourceSampleRate == TARGET_SAMPLE_RATE) return samples
+
+		val ratio = TARGET_SAMPLE_RATE.toDouble() / sourceSampleRate
+		val outputLength = (samples.size * ratio).toInt()
+		val resampled = ShortArray(outputLength)
+
+		for (i in resampled.indices) {
+			val position = i / ratio
+			val index1 = floor(position).toInt()
+			val index2 = index1 + 1
+			val fraction = position - index1
+
+			val sample1 = if (index1 < samples.size) samples[index1].toDouble() else 0.0
+			val sample2 = if (index2 < samples.size) samples[index2].toDouble() else 0.0
+
+			resampled[i] = (sample1 * (1 - fraction) + sample2 * fraction).toInt().toShort()
+		}
+		return resampled
+	}
+
+	private fun shortsToFloats(samples: ShortArray): FloatArray {
+		val floats = FloatArray(samples.size)
+		for (i in samples.indices) {
+			floats[i] = samples[i].toFloat() / 32768.0f
+		}
+		return floats
+	}
+}

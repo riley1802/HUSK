@@ -133,6 +133,10 @@ interface DataStoreRepository {
   fun saveNotesE4bSystemPrompt(prompt: String)
   fun readNotesSelectedModel(): String
   fun saveNotesSelectedModel(modelKey: String)
+
+  // Audio Scribe / Whisper settings.
+  fun readWhisperSelectedModel(): String
+  fun saveWhisperSelectedModel(modelKey: String)
 }
 
 /** Repository for managing data using Proto DataStore. */
@@ -546,6 +550,19 @@ class DefaultDataStoreRepository(
     runBlocking {
       dataStore.updateData { settings ->
         settings.toBuilder().setNotesSelectedModel(modelKey).build()
+      }
+    }
+  }
+
+  override fun readWhisperSelectedModel(): String {
+    val stored = runBlocking { dataStore.data.first().whisperSelectedModel }
+    return stored.ifBlank { "small" }
+  }
+
+  override fun saveWhisperSelectedModel(modelKey: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setWhisperSelectedModel(modelKey).build()
       }
     }
   }

@@ -105,6 +105,9 @@ message Settings {
   string notes_e4b_system_prompt = 16;
   // Which model the Notes screen defaults to ("e2b" or "e4b").
   string notes_selected_model = 17;
+
+  // Which Whisper model to use for Audio Scribe transcription ("tiny", "base", or "small").
+  string whisper_selected_model = 18;
 }
 
 message UserData {

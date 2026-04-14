@@ -36,6 +36,7 @@ enum class RuntimeType {
   @SerializedName("unknown") UNKNOWN,
   @SerializedName("litert_lm") LITERT_LM,
   @SerializedName("aicore") AICORE,
+  @SerializedName("whisper") WHISPER,
 }
 
 enum class AICoreModelReleaseStage {

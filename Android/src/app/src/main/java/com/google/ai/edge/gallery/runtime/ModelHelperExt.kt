@@ -28,3 +28,7 @@ val Model.runtimeHelper: LlmModelHelper
     }
     return LlmChatModelHelper
   }
+
+/** True if this model uses the Whisper STT runtime (not an LLM). */
+val Model.isWhisperModel: Boolean
+  get() = this.runtimeType == RuntimeType.WHISPER
