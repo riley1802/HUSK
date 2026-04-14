@@ -18,14 +18,19 @@ package com.google.ai.edge.gallery.ui.llmchat
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.google.ai.edge.gallery.common.AudioDecoder
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.rag.ChunkResult
 import com.google.ai.edge.gallery.data.rag.RagManager
+import com.google.ai.edge.gallery.data.speaker.SpeakerDiarizationEngine
+import com.google.ai.edge.gallery.runtime.WhisperModelHelper
 import com.google.ai.edge.gallery.runtime.runtimeHelper
+import com.google.ai.edge.gallery.ui.audioscribe.TranscriptSegment
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageError
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageLoading
@@ -338,6 +343,110 @@ open class LlmChatViewModelBase() : ChatViewModel() {
         onError = onError,
         allowThinking = allowThinking,
       )
+    }
+  }
+
+  /**
+   * Process audio through the Whisper transcription + speaker diarization pipeline.
+   * This is the alternative to [generateResponse] when a Whisper model is active.
+   */
+  fun processAudioWithWhisper(
+    model: Model,
+    context: Context,
+    audioUri: Uri,
+    diarizationEngine: SpeakerDiarizationEngine?,
+    onDone: () -> Unit = {},
+    onError: (String) -> Unit,
+  ) {
+    viewModelScope.launch(Dispatchers.Default) {
+      setInProgress(true)
+      setPreparing(true)
+
+      try {
+        // Phase 1: Extract audio.
+        addMessage(model = model, message = ChatMessageLoading(extraProgressLabel = "Extracting audio..."))
+        val decoder = AudioDecoder(context)
+        val decoded = decoder.decode(audioUri) { progress ->
+          // Progress callback — could update UI loading text.
+        }
+
+        if (decoded == null) {
+          removeLastMessage(model = model)
+          setInProgress(false)
+          setPreparing(false)
+          onError("Failed to decode audio file")
+          return@launch
+        }
+
+        // Phase 2: Transcribe.
+        replaceLastMessage(
+          model = model,
+          message = ChatMessageLoading(extraProgressLabel = "Transcribing..."),
+          type = ChatMessageType.LOADING,
+        )
+        setPreparing(false)
+
+        val segments = WhisperModelHelper.transcribe(decoded.samples)
+
+        if (segments.isEmpty()) {
+          removeLastMessage(model = model)
+          setInProgress(false)
+          onError("Transcription produced no results")
+          return@launch
+        }
+
+        // Phase 3: Speaker diarization.
+        if (diarizationEngine != null) {
+          replaceLastMessage(
+            model = model,
+            message = ChatMessageLoading(extraProgressLabel = "Identifying speakers..."),
+            type = ChatMessageType.LOADING,
+          )
+
+          val diarized = diarizationEngine.diarize(segments, decoded.samples)
+          val transcriptSegments = diarized.map { ds ->
+            TranscriptSegment(
+              speakerName = ds.speakerName,
+              text = ds.text,
+              startMs = ds.startMs,
+              endMs = ds.endMs,
+              speakerId = ds.speakerId,
+              speakerEmbedding = ds.speakerEmbedding,
+            )
+          }
+
+          removeLastMessage(model = model)
+          addMessage(
+            model = model,
+            message = ChatMessageText(
+              content = TranscriptSegment.toJson(transcriptSegments),
+              side = ChatSide.AGENT,
+            ),
+          )
+        } else {
+          // No diarization — just show plain transcript.
+          val plainText = segments.joinToString("\n") { seg ->
+            "[${seg.startMs / 1000}s] ${seg.text}"
+          }
+          removeLastMessage(model = model)
+          addMessage(
+            model = model,
+            message = ChatMessageText(
+              content = plainText,
+              side = ChatSide.AGENT,
+            ),
+          )
+        }
+
+        setInProgress(false)
+        onDone()
+      } catch (e: Exception) {
+        Log.e(TAG, "Error in Whisper processing", e)
+        removeLastMessage(model = model)
+        setInProgress(false)
+        setPreparing(false)
+        onError("Transcription error: ${e.message}")
+      }
     }
   }
 
