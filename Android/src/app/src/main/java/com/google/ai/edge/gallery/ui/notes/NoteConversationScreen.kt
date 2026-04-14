@@ -374,7 +374,7 @@ private fun NoteMessageBubble(
 					else MaterialTheme.customColors.agentBubbleBgColor
 				)
 				.background(highlightColor)
-				.padding(config.bubblePaddingInner.dp),
+				.padding(config.bubblePaddingInner),
 		) {
 			if (message.content.isNotBlank()) {
 				MarkdownText(

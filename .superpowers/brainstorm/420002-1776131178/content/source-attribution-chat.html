@@ -1,0 +1,92 @@
+<h2>Source Attribution — In Chat</h2>
+<p class="subtitle">How RAG sources appear below model responses in the existing chat UI</p>
+
+<div class="mockup">
+  <div class="mockup-header">Chat Screen with RAG Attribution</div>
+  <div class="mockup-body" style="background: #0E1013; color: #E6E8EC; font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; padding: 24px; min-height: 500px; display: flex; flex-direction: column; gap: 10px;">
+
+    <!-- User message -->
+    <div style="display: flex; justify-content: flex-end;">
+      <div style="background: #9C9276; color: #0E1013; padding: 12px 16px; border-radius: 12px 12px 2px 12px; max-width: 75%; font-size: 14px; line-height: 1.5; font-weight: 500;">
+        What are the performance requirements for the document search feature?
+      </div>
+    </div>
+
+    <!-- Agent response -->
+    <div style="display: flex; flex-direction: column; gap: 0; max-width: 85%;">
+      <!-- Response bubble -->
+      <div style="background: #1B1F24; padding: 14px 16px; border-radius: 12px 12px 12px 2px; font-size: 14px; line-height: 1.7; color: #E6E8EC;">
+        Based on your project documentation, the performance requirements are:<br><br>
+        <strong>Embedding generation</strong> must complete within 30 seconds for a 100-page document.<br><br>
+        <strong>Retrieval latency</strong> should be under 500ms for the full round-trip (query embedding + top-k search + context preparation).<br><br>
+        The system should support <strong>at least 1,000 documents</strong> without performance degradation, with vector storage budgeted at 1–2 GB.
+      </div>
+
+      <!-- Sources section — collapsed by default, shown expanded here -->
+      <div style="margin-top: 4px; background: #15181C; border-radius: 2px 2px 12px 12px; overflow: hidden;">
+        <!-- Toggle header -->
+        <div style="padding: 10px 16px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <span style="color: #6B7280; font-size: 12px;">▾</span>
+          <span style="color: #6B7280; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Sources · 2 documents</span>
+        </div>
+
+        <!-- Source 1 -->
+        <div style="padding: 0 16px 10px; display: flex; gap: 10px; align-items: flex-start;">
+          <div style="min-width: 4px; background: #D6C9A8; border-radius: 2px; align-self: stretch;"></div>
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="font-size: 12px; font-weight: 700; color: #A0A6B0;">project-requirements.pdf</div>
+              <div style="font-size: 11px; color: #D6C9A8; font-weight: 600;">82%</div>
+            </div>
+            <div style="font-size: 12px; color: #6B7280; margin-top: 3px; line-height: 1.5;">Performance targets: embedding generation must complete within 30 seconds for a 100-page document. Retrieval latency under 500ms...</div>
+          </div>
+        </div>
+
+        <!-- Source 2 -->
+        <div style="padding: 0 16px 12px; display: flex; gap: 10px; align-items: flex-start;">
+          <div style="min-width: 4px; background: #9C9276; border-radius: 2px; align-self: stretch;"></div>
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="font-size: 12px; font-weight: 700; color: #A0A6B0;">api-design-notes.txt</div>
+              <div style="font-size: 11px; color: #9C9276; font-weight: 600;">71%</div>
+            </div>
+            <div style="font-size: 12px; color: #6B7280; margin-top: 3px; line-height: 1.5;">The system should support at least 1000 documents without degradation, with compression and cleanup tools for managing storage...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spacer to show context -->
+    <div style="height: 16px;"></div>
+
+    <!-- Another user message -->
+    <div style="display: flex; justify-content: flex-end;">
+      <div style="background: #9C9276; color: #0E1013; padding: 12px 16px; border-radius: 12px 12px 2px 12px; max-width: 75%; font-size: 14px; line-height: 1.5; font-weight: 500;">
+        What about the privacy requirements?
+      </div>
+    </div>
+
+    <!-- Agent response — no RAG sources (below threshold) -->
+    <div style="display: flex; flex-direction: column; gap: 0; max-width: 85%;">
+      <div style="background: #1B1F24; padding: 14px 16px; border-radius: 12px 12px 12px 2px; font-size: 14px; line-height: 1.7; color: #E6E8EC;">
+        I don't have specific privacy requirements in your knowledge base. Could you upload the privacy policy or security requirements document? You can add it from the Knowledge Base manager or share it directly to HUSK from another app.
+      </div>
+      <!-- No sources section — nothing retrieved above threshold -->
+    </div>
+
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>Attribution Design Details</h3>
+  <ul style="line-height: 2; color: #ccc; font-size: 14px;">
+    <li><strong>Sources panel</strong> attaches directly below the response bubble (2px top radius creates visual continuity)</li>
+    <li><strong>Collapsed by default</strong> — shows "Sources · N documents" toggle. Tap to expand.</li>
+    <li><strong>Sand accent bar</strong> (<code>#D6C9A8</code>) on highest-relevance source, muted accent (<code>#9C9276</code>) on lower</li>
+    <li><strong>Relevance score</strong> shown as percentage — accent-colored for high, muted for lower</li>
+    <li><strong>Chunk preview</strong> in muted text (<code>#6B7280</code>) — truncated to 2 lines</li>
+    <li><strong>No sources case</strong> — when nothing retrieved above threshold, no sources section appears at all</li>
+    <li><strong>User bubble</strong> uses existing <code>userBubbleBgColor</code> (<code>#9C9276</code> / accentMuted)</li>
+    <li><strong>Agent bubble</strong> uses existing <code>agentBubbleBgColor</code> (<code>#1B1F24</code> / surfaceHigh)</li>
+  </ul>
+</div>

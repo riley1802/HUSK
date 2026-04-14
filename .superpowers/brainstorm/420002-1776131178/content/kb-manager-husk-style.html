@@ -1,0 +1,210 @@
+<h2>Knowledge Base Manager — HUSK Style</h2>
+<p class="subtitle">Matching the existing dark charcoal + sand accent design language</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Knowledge Base (Main View)</div>
+    <div class="mockup-body" style="background: #0E1013; color: #E6E8EC; font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; padding: 0; min-height: 600px;">
+
+      <!-- Top App Bar -->
+      <div style="padding: 16px 24px; display: flex; align-items: center; gap: 12px;">
+        <div style="color: #A0A6B0; font-size: 20px;">←</div>
+        <div style="font-size: 20px; font-weight: 600; color: #E6E8EC; flex: 1;">Knowledge Base</div>
+        <div style="color: #A0A6B0; font-size: 18px;">⚙</div>
+      </div>
+
+      <!-- Stats Row (surfaceHigh bg) -->
+      <div style="margin: 0 24px; padding: 12px 16px; background: #1B1F24; border-radius: 12px; display: flex; gap: 16px; font-size: 12px; font-weight: 600;">
+        <span style="color: #A0A6B0;">12 docs</span>
+        <span style="color: #2C313A;">|</span>
+        <span style="color: #A0A6B0;">847 chunks</span>
+        <span style="color: #2C313A;">|</span>
+        <span style="color: #A0A6B0;">2.4 MB</span>
+        <span style="color: #2C313A;">|</span>
+        <span style="color: #7E9B7A;">Gecko</span>
+      </div>
+
+      <!-- Document Cards -->
+      <div style="padding: 16px 24px; display: flex; flex-direction: column; gap: 8px;">
+
+        <!-- Document 1 — Ready -->
+        <div style="background: #15181C; border-radius: 12px; padding: 16px; cursor: pointer;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 600; color: #E6E8EC;">project-requirements.pdf</div>
+              <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">42 chunks · 186 KB vectors · Apr 10</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; color: #7E9B7A; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+              <span style="font-size: 8px;">●</span> Ready
+            </div>
+          </div>
+        </div>
+
+        <!-- Document 2 — Ready -->
+        <div style="background: #15181C; border-radius: 12px; padding: 16px; cursor: pointer;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 600; color: #E6E8EC;">meeting-notes-q1.md</div>
+              <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">28 chunks · 94 KB vectors · Apr 8</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; color: #7E9B7A; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+              <span style="font-size: 8px;">●</span> Ready
+            </div>
+          </div>
+        </div>
+
+        <!-- Document 3 — Processing -->
+        <div style="background: #15181C; border-radius: 12px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 600; color: #E6E8EC;">kotlin-coroutines-guide.pdf</div>
+              <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Processing — 64%</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; color: #C9A86E; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+              <span style="font-size: 8px;">◐</span> Indexing
+            </div>
+          </div>
+          <!-- Progress bar -->
+          <div style="margin-top: 10px; height: 3px; background: #2C313A; border-radius: 2px; overflow: hidden;">
+            <div style="width: 64%; height: 100%; background: #D6C9A8; border-radius: 2px;"></div>
+          </div>
+        </div>
+
+        <!-- Document 4 — Ready -->
+        <div style="background: #15181C; border-radius: 12px; padding: 16px; cursor: pointer;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 600; color: #E6E8EC;">api-design-notes.txt</div>
+              <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">15 chunks · 38 KB vectors · Apr 5</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; color: #7E9B7A; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+              <span style="font-size: 8px;">●</span> Ready
+            </div>
+          </div>
+        </div>
+
+        <!-- Document 5 — Failed -->
+        <div style="background: #15181C; border-radius: 12px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 600; color: #E6E8EC;">scanned-receipt.pdf</div>
+              <div style="font-size: 12px; color: #C97A6E; margin-top: 4px;">No extractable text (image-only PDF)</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; color: #C97A6E; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+              <span style="font-size: 8px;">●</span> Failed
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- FAB -->
+      <div style="padding: 16px 24px; display: flex; justify-content: flex-end;">
+        <div style="background: #D6C9A8; color: #0E1013; padding: 12px 24px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+          + Add Document
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Document Detail (on tap)</div>
+    <div class="mockup-body" style="background: #0E1013; color: #E6E8EC; font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; padding: 0; min-height: 600px;">
+
+      <!-- Top App Bar -->
+      <div style="padding: 16px 24px; display: flex; align-items: center; gap: 12px;">
+        <div style="color: #A0A6B0; font-size: 20px;">←</div>
+        <div style="font-size: 18px; font-weight: 600; color: #E6E8EC; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">project-requirements.pdf</div>
+        <div style="color: #C97A6E; font-size: 13px; font-weight: 600; cursor: pointer;">Delete</div>
+      </div>
+
+      <!-- Metadata Card -->
+      <div style="margin: 0 24px; background: #15181C; border-radius: 12px; padding: 16px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 13px;">
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Type</div>
+            <div style="color: #E6E8EC;">PDF</div>
+          </div>
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Original Size</div>
+            <div style="color: #E6E8EC;">1.2 MB</div>
+          </div>
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Chunks</div>
+            <div style="color: #E6E8EC;">42</div>
+          </div>
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Vector Size</div>
+            <div style="color: #E6E8EC;">186 KB</div>
+          </div>
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Added</div>
+            <div style="color: #E6E8EC;">Apr 10, 2026</div>
+          </div>
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Embedding</div>
+            <div style="color: #D6C9A8;">Gecko 256d</div>
+          </div>
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Collection</div>
+            <div style="color: #E6E8EC;">Global</div>
+          </div>
+          <div>
+            <div style="color: #6B7280; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Status</div>
+            <div style="color: #7E9B7A;">Ready</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chunk Preview Section -->
+      <div style="padding: 16px 24px 8px;">
+        <div style="font-size: 14px; font-weight: 700; color: #A0A6B0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Chunks</div>
+      </div>
+
+      <div style="padding: 0 24px; display: flex; flex-direction: column; gap: 8px;">
+        <!-- Chunk 1 -->
+        <div style="background: #1B1F24; border-radius: 12px; padding: 14px;">
+          <div style="color: #6B7280; font-size: 11px; font-weight: 700; margin-bottom: 6px;">1 / 42</div>
+          <div style="color: #A0A6B0; font-size: 13px; line-height: 1.6;">The project aims to deliver a fully offline AI assistant capable of document understanding, semantic search, and contextual conversation. Key requirements include: privacy-first architecture...</div>
+        </div>
+
+        <!-- Chunk 2 -->
+        <div style="background: #1B1F24; border-radius: 12px; padding: 14px;">
+          <div style="color: #6B7280; font-size: 11px; font-weight: 700; margin-bottom: 6px;">2 / 42</div>
+          <div style="color: #A0A6B0; font-size: 13px; line-height: 1.6;">Performance targets: embedding generation must complete within 30 seconds for a 100-page document. Retrieval latency under 500ms. The system should support at least 1000 documents...</div>
+        </div>
+
+        <!-- Chunk 3 -->
+        <div style="background: #1B1F24; border-radius: 12px; padding: 14px;">
+          <div style="color: #6B7280; font-size: 11px; font-weight: 700; margin-bottom: 6px;">3 / 42</div>
+          <div style="color: #A0A6B0; font-size: 13px; line-height: 1.6;">User interface requirements: transparent source attribution for all RAG-grounded responses. Users must be able to see which documents contributed to any answer...</div>
+        </div>
+
+        <div style="text-align: center; color: #6B7280; font-size: 12px; padding: 8px;">
+          39 more chunks
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="padding: 16px 24px; display: flex; gap: 8px;">
+        <div style="background: #1B1F24; color: #A0A6B0; padding: 10px 0; border-radius: 12px; font-size: 13px; font-weight: 600; flex: 1; text-align: center; cursor: pointer;">Re-index</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>Design Notes</h3>
+  <ul style="line-height: 2; color: #ccc; font-size: 14px;">
+    <li><strong>Background:</strong> <code>#0E1013</code> — matches HUSK's huskBackground</li>
+    <li><strong>Cards:</strong> <code>#15181C</code> (huskSurface) with <code>12dp</code> corner radius — same as model item cards</li>
+    <li><strong>Elevated surfaces:</strong> <code>#1B1F24</code> (surfaceHigh) — for stats bar and chunk previews</li>
+    <li><strong>Accent:</strong> <code>#D6C9A8</code> (sand) — used on the Add Document button and active embedding label</li>
+    <li><strong>Status colors:</strong> Success <code>#7E9B7A</code>, Warning <code>#C9A86E</code>, Error <code>#C97A6E</code> — HUSK's muted palette</li>
+    <li><strong>Typography:</strong> Nunito, same weight hierarchy — 600 for titles, 700 for labels, 400 for body</li>
+    <li><strong>Spacing:</strong> 24dp horizontal padding, 16dp card padding, 8dp card gaps — matches HomeScreen</li>
+    <li><strong>Progress bar:</strong> Sand accent on outline (#2C313A) track — same as download progress pattern</li>
+  </ul>
+</div>

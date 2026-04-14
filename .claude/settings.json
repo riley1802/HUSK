@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew :app:compileDebugKotlin)",
+      "Read(//tmp/**)",
+      "Read(//tmp/husk-verify/**)",
+      "Bash(./gradlew :app:assembleDebug)",
+      "Bash(adb devices:*)",
+      "Bash(./gradlew :app:compileGithubDebugKotlin)",
+      "Bash(./gradlew :app:tasks --group build)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

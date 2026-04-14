@@ -1,0 +1,149 @@
+<h2>Knowledge Base Manager — UI Layout</h2>
+<p class="subtitle">Accessible from the main nav or settings. Manages all indexed documents.</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Knowledge Base Manager (Main View)</div>
+    <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; font-family: sans-serif; padding: 0;">
+
+      <!-- Top bar -->
+      <div style="padding: 16px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 18px; font-weight: 600;">Knowledge Base</div>
+        <div style="display: flex; gap: 8px;">
+          <div style="background: #7c3aed; color: white; padding: 8px 16px; border-radius: 20px; font-size: 13px; cursor: pointer;">+ Add Document</div>
+        </div>
+      </div>
+
+      <!-- Stats bar -->
+      <div style="padding: 12px 20px; background: #1e1e3a; display: flex; gap: 24px; font-size: 12px; color: #999;">
+        <span>📄 12 documents</span>
+        <span>🧩 847 chunks</span>
+        <span>💾 2.4 MB vectors</span>
+        <span style="color: #4ade80;">● Gecko active</span>
+      </div>
+
+      <!-- Search bar -->
+      <div style="padding: 12px 20px;">
+        <div style="background: #252545; border: 1px solid #333; border-radius: 8px; padding: 10px 14px; color: #888; font-size: 14px;">
+          🔍 Search documents...
+        </div>
+      </div>
+
+      <!-- Document list -->
+      <div style="padding: 0 20px;">
+        <!-- Document 1 -->
+        <div style="padding: 14px 0; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 15px; font-weight: 500; color: #e0e0e0;">📄 project-requirements.pdf</div>
+            <div style="font-size: 12px; color: #888; margin-top: 4px;">42 chunks · 186 KB · Added Apr 10</div>
+          </div>
+          <div style="color: #4ade80; font-size: 12px;">Ready ●</div>
+        </div>
+
+        <!-- Document 2 -->
+        <div style="padding: 14px 0; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 15px; font-weight: 500; color: #e0e0e0;">📄 meeting-notes-q1.md</div>
+            <div style="font-size: 12px; color: #888; margin-top: 4px;">28 chunks · 94 KB · Added Apr 8</div>
+          </div>
+          <div style="color: #4ade80; font-size: 12px;">Ready ●</div>
+        </div>
+
+        <!-- Document 3 - processing -->
+        <div style="padding: 14px 0; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 15px; font-weight: 500; color: #e0e0e0;">📄 kotlin-coroutines-guide.pdf</div>
+            <div style="font-size: 12px; color: #888; margin-top: 4px;">Processing... 64%</div>
+          </div>
+          <div style="color: #f59e0b; font-size: 12px;">Processing ◐</div>
+        </div>
+
+        <!-- Document 4 -->
+        <div style="padding: 14px 0; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 15px; font-weight: 500; color: #e0e0e0;">📄 api-design-notes.txt</div>
+            <div style="font-size: 12px; color: #888; margin-top: 4px;">15 chunks · 38 KB · Added Apr 5</div>
+          </div>
+          <div style="color: #4ade80; font-size: 12px;">Ready ●</div>
+        </div>
+
+        <!-- Document 5 - failed -->
+        <div style="padding: 14px 0; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 15px; font-weight: 500; color: #e0e0e0;">📄 scanned-receipt.pdf</div>
+            <div style="font-size: 12px; color: #f87171; margin-top: 4px;">Failed: No extractable text (image-only PDF)</div>
+          </div>
+          <div style="color: #f87171; font-size: 12px;">Failed ✕</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Document Detail (on tap)</div>
+    <div class="mockup-body" style="background: #1a1a2e; color: #e0e0e0; font-family: sans-serif; padding: 0;">
+
+      <!-- Header -->
+      <div style="padding: 16px 20px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 12px;">
+        <div style="color: #999; cursor: pointer;">← Back</div>
+        <div style="font-size: 16px; font-weight: 600; flex: 1;">project-requirements.pdf</div>
+        <div style="color: #f87171; font-size: 13px; cursor: pointer;">🗑 Delete</div>
+      </div>
+
+      <!-- Metadata -->
+      <div style="padding: 16px 20px; background: #1e1e3a;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+          <div><span style="color: #888;">Type:</span> <span>PDF</span></div>
+          <div><span style="color: #888;">Size:</span> <span>1.2 MB (original)</span></div>
+          <div><span style="color: #888;">Chunks:</span> <span>42</span></div>
+          <div><span style="color: #888;">Vector size:</span> <span>186 KB</span></div>
+          <div><span style="color: #888;">Added:</span> <span>Apr 10, 2026</span></div>
+          <div><span style="color: #888;">Embedding:</span> <span>Gecko 256d</span></div>
+          <div><span style="color: #888;">Collection:</span> <span>Global</span></div>
+          <div><span style="color: #888;">Status:</span> <span style="color: #4ade80;">Ready</span></div>
+        </div>
+      </div>
+
+      <!-- Chunk preview -->
+      <div style="padding: 16px 20px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Chunk Preview</div>
+
+        <div style="background: #252545; border-radius: 8px; padding: 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.5;">
+          <div style="color: #888; font-size: 11px; margin-bottom: 6px;">Chunk 1 of 42</div>
+          <div style="color: #ccc;">The project aims to deliver a fully offline AI assistant capable of document understanding, semantic search, and contextual conversation. Key requirements include: privacy-first architecture with no cloud dependencies for core features...</div>
+        </div>
+
+        <div style="background: #252545; border-radius: 8px; padding: 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.5;">
+          <div style="color: #888; font-size: 11px; margin-bottom: 6px;">Chunk 2 of 42</div>
+          <div style="color: #ccc;">Performance targets: embedding generation must complete within 30 seconds for a 100-page document. Retrieval latency under 500ms. The system should support at least 1000 documents without degradation...</div>
+        </div>
+
+        <div style="background: #252545; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.5;">
+          <div style="color: #888; font-size: 11px; margin-bottom: 6px;">Chunk 3 of 42</div>
+          <div style="color: #ccc;">User interface requirements: transparent source attribution for all RAG-grounded responses. Users must be able to see which documents contributed to any answer, with relevance scores and chunk previews...</div>
+        </div>
+
+        <div style="text-align: center; color: #888; font-size: 13px; margin-top: 12px;">
+          ↓ 39 more chunks
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="padding: 16px 20px; border-top: 1px solid #333; display: flex; gap: 8px;">
+        <div style="background: #252545; color: #ccc; padding: 8px 16px; border-radius: 20px; font-size: 13px; flex: 1; text-align: center;">Re-index</div>
+        <div style="background: #252545; color: #ccc; padding: 8px 16px; border-radius: 20px; font-size: 13px; flex: 1; text-align: center;">Export Chunks</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px;">
+  <h3>UI Components</h3>
+  <ul style="line-height: 1.8; color: #ccc;">
+    <li><strong>Stats bar</strong> — at-a-glance health: doc count, chunk count, vector storage, active embedding model</li>
+    <li><strong>Document list</strong> — shows status (Ready / Processing / Failed), chunk count, size, date</li>
+    <li><strong>Detail view</strong> — full metadata, scrollable chunk preview, re-index and delete actions</li>
+    <li><strong>Add button</strong> — opens system file picker (text, PDF, markdown filters)</li>
+    <li><strong>Failed state</strong> — clear error message with reason (e.g., image-only PDF)</li>
+  </ul>
+</div>

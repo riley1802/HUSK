@@ -17,6 +17,7 @@
 package com.google.ai.edge.gallery.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.core.graphics.ColorUtils as AndroidColorUtils
 
 // Husk palette — cool monochrome dark with a single warm-sand accent.
 val huskBackground = Color(0xFF0E1013)
@@ -34,6 +35,46 @@ val huskOnAccent = Color(0xFF0E1013)
 val huskError = Color(0xFFC97A6E)
 val huskWarning = Color(0xFFC9A86E)
 val huskSuccess = Color(0xFF7E9B7A)
+
+// AMOLED black palette — true black background with proportionally darker surfaces.
+val amoledBackground = Color.Black
+val amoledSurface = Color(0xFF0A0A0A)
+val amoledSurfaceHigh = Color(0xFF121212)
+val amoledSurfaceHighest = Color(0xFF1A1A1A)
+val amoledOutline = Color(0xFF222222)
+val amoledOutlineSoft = Color(0xFF161616)
+
+// Accent color presets — all desaturated/muted to fit the monochrome aesthetic.
+data class AccentPreset(val name: String, val argb: Int, val color: Color)
+
+val accentPresets = listOf(
+	AccentPreset("Sand", 0, huskAccent), // 0 means "use default"
+	AccentPreset("Ice", 0xFFA8C4D6.toInt(), Color(0xFFA8C4D6)),
+	AccentPreset("Teal", 0xFF8CBEB2.toInt(), Color(0xFF8CBEB2)),
+	AccentPreset("Rose", 0xFFC9A0A0.toInt(), Color(0xFFC9A0A0)),
+	AccentPreset("Lavender", 0xFFB0A8C9.toInt(), Color(0xFFB0A8C9)),
+	AccentPreset("Amber", 0xFFC9B07A.toInt(), Color(0xFFC9B07A)),
+	AccentPreset("Sage", 0xFF9BB09A.toInt(), Color(0xFF9BB09A)),
+	AccentPreset("Slate", 0xFFA0A8B0.toInt(), Color(0xFFA0A8B0)),
+)
+
+/** Derive a muted variant of an accent color (reduced saturation + brightness). */
+fun deriveAccentMuted(accent: Color): Color {
+	val hsl = FloatArray(3)
+	AndroidColorUtils.colorToHSL(android.graphics.Color.argb(255, (accent.red * 255).toInt(), (accent.green * 255).toInt(), (accent.blue * 255).toInt()), hsl)
+	hsl[1] = hsl[1] * 0.7f // reduce saturation
+	hsl[2] = hsl[2] * 0.65f // reduce lightness
+	val argb = AndroidColorUtils.HSLToColor(hsl)
+	return Color(argb)
+}
+
+/** Determine whether text on the accent should be light or dark. */
+fun deriveOnAccent(accent: Color): Color {
+	val luminance = AndroidColorUtils.calculateLuminance(
+		android.graphics.Color.argb(255, (accent.red * 255).toInt(), (accent.green * 255).toInt(), (accent.blue * 255).toInt())
+	)
+	return if (luminance > 0.4) huskBackground else huskTextPrimary
+}
 
 // The light palette is retained as a build-time fallback only — Husk runs dark always
 // (see GalleryTheme in Theme.kt). These tokens map to the same Husk values so any stray

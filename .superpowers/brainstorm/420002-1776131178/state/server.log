@@ -1,0 +1,7 @@
+{"type":"server-started","port":60244,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:60244","screen_dir":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/420002-1776131178/content","state_dir":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/420002-1776131178/state"}
+{"type":"screen-added","file":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/420002-1776131178/content/architecture-overview.html"}
+{"type":"screen-added","file":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/420002-1776131178/content/kb-manager-ui.html"}
+{"type":"screen-added","file":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/420002-1776131178/content/kb-manager-husk-style.html"}
+{"type":"screen-added","file":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/420002-1776131178/content/source-attribution-chat.html"}
+{"type":"screen-added","file":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/420002-1776131178/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

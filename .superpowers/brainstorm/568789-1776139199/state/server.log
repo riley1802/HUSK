@@ -1,0 +1,4 @@
+{"type":"server-started","port":56244,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:56244","screen_dir":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/568789-1776139199/content","state_dir":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/568789-1776139199/state"}
+{"type":"screen-added","file":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/568789-1776139199/content/notes-card-placement.html"}
+{"type":"screen-added","file":"/home/rileyt/AI/HUSK/.superpowers/brainstorm/568789-1776139199/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}
