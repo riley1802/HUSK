@@ -21,6 +21,7 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +41,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.rounded.Mic
@@ -51,12 +55,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,18 +76,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.speaker.Transcription
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.theme.customColors
 
 private const val TAG = "AudioScribeScreen"
 
-/**
- * Dedicated Audio Scribe screen — purpose-built for transcription.
- * Clean recorder/file-picker UI with transcript displayed below.
- * No chat bubbles.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioScribeScreen(
@@ -92,18 +96,25 @@ fun AudioScribeScreen(
 	val clipboardManager = LocalClipboardManager.current
 	val scrollState = rememberScrollState()
 
-	// Find Gemma E4B for summary generation.
-	val gemmaE4b: Model? = remember(modelManagerViewModel) {
-		modelManagerViewModel?.let { mm ->
-			val allModels = mm.getAllModels()
-			viewModel.findGemmaE4b(allModels)
+	var selectedTab by remember { mutableIntStateOf(0) }
+
+	// Find models.
+	val gemmaE4b = remember(modelManagerViewModel) {
+		modelManagerViewModel?.let { viewModel.findGemmaE4b(it.getAllModels()) }
+	}
+
+	// Auto-initialize Whisper when entering the screen.
+	LaunchedEffect(uiState.selectedWhisperModel, modelManagerViewModel) {
+		if (!uiState.whisperModelReady && !uiState.isInitializing && modelManagerViewModel != null) {
+			val whisperModel = viewModel.findWhisperModel(modelManagerViewModel.getAllModels())
+			if (whisperModel != null) {
+				viewModel.initializeWhisperFromModel(context, whisperModel)
+			}
 		}
 	}
 
-	// Speaker label sheet state.
 	var labelingSegment by remember { mutableStateOf<TranscriptSegment?>(null) }
 
-	// File picker.
 	val filePicker = rememberLauncherForActivityResult(
 		contract = ActivityResultContracts.StartActivityForResult()
 	) { result ->
@@ -132,29 +143,19 @@ fun AudioScribeScreen(
 				},
 				actions = {
 					if (uiState.transcriptSegments != null) {
-						// New transcription button.
 						IconButton(onClick = { viewModel.clearResults() }) {
 							Icon(Icons.Outlined.Refresh, contentDescription = "New")
 						}
-						// Share button.
 						IconButton(onClick = {
-							val text = uiState.transcriptSegments?.joinToString("\n") { seg ->
-								"${seg.speakerName} [${seg.formatTimestamp()}]: ${seg.text}"
-							} ?: ""
-							val fullText = if (uiState.summaryText != null) {
-								"SUMMARY:\n${uiState.summaryText}\n\nTRANSCRIPT:\n$text"
-							} else {
-								text
-							}
+							val text = buildShareText(uiState.transcriptSegments, uiState.summaryText)
 							val intent = Intent(Intent.ACTION_SEND).apply {
 								type = "text/plain"
-								putExtra(Intent.EXTRA_TEXT, fullText)
+								putExtra(Intent.EXTRA_TEXT, text)
 							}
 							context.startActivity(Intent.createChooser(intent, "Share transcript"))
 						}) {
 							Icon(Icons.Outlined.Share, contentDescription = "Share")
 						}
-						// Copy button.
 						IconButton(onClick = {
 							val text = uiState.transcriptSegments?.joinToString("\n") { seg ->
 								"${seg.speakerName} [${seg.formatTimestamp()}]: ${seg.text}"
@@ -174,73 +175,52 @@ fun AudioScribeScreen(
 		Column(
 			modifier = Modifier
 				.fillMaxSize()
-				.padding(innerPadding)
-				.verticalScroll(scrollState),
+				.padding(innerPadding),
 		) {
-			// Whisper model selector.
-			WhisperConfigCard(
-				selectedModel = uiState.selectedWhisperModel,
-				onModelSelected = { viewModel.selectWhisperModel(it) },
-			)
-
-			Spacer(modifier = Modifier.height(8.dp))
-
-			// Error display.
-			uiState.error?.let { error ->
-				Text(
-					error,
-					style = MaterialTheme.typography.bodySmall,
-					color = MaterialTheme.colorScheme.error,
-					modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+			// Tabs: Scribe / History
+			TabRow(selectedTabIndex = selectedTab) {
+				Tab(
+					selected = selectedTab == 0,
+					onClick = { selectedTab = 0 },
+					text = { Text("Scribe") },
+				)
+				Tab(
+					selected = selectedTab == 1,
+					onClick = { selectedTab = 1 },
+					text = { Text("History") },
+					icon = { Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(16.dp)) },
 				)
 			}
 
-			when {
-				uiState.isProcessing -> {
-					ProcessingState(phase = uiState.processingPhase ?: "Processing...")
-				}
-				uiState.transcriptSegments != null -> {
-					// Transcript view.
-					TranscriptCard(
-						segments = uiState.transcriptSegments!!,
-						onUnknownSpeakerClicked = { segment ->
-							labelingSegment = segment
-						},
-					)
-
-					// Summary card.
-					uiState.summaryText?.let { summary ->
-						Spacer(modifier = Modifier.height(12.dp))
-						SummaryCard(summary = summary)
-					}
-				}
-				else -> {
-					// Empty state — input controls.
-					EmptyState(
-						onPickFile = {
-							val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-								addCategory(Intent.CATEGORY_OPENABLE)
-								type = "*/*"
-								val mimeTypes = arrayOf("audio/*", "video/*")
-								putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
-								putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
-									.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-									.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-							}
-							filePicker.launch(intent)
-						},
-						onRecord = {
-							// TODO: Open recording flow
-						},
-					)
-				}
+			when (selectedTab) {
+				0 -> ScribeTab(
+					uiState = uiState,
+					onPickFile = {
+						val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+							addCategory(Intent.CATEGORY_OPENABLE)
+							type = "*/*"
+							putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("audio/*", "video/*"))
+							putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+								.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+								.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+						}
+						filePicker.launch(intent)
+					},
+					onModelSelected = { viewModel.selectWhisperModel(it) },
+					onUnknownSpeakerClicked = { labelingSegment = it },
+				)
+				1 -> HistoryTab(
+					transcriptions = uiState.transcriptions,
+					onTranscriptionClicked = { id ->
+						viewModel.loadTranscription(id)
+						selectedTab = 0
+					},
+					onDeleteClicked = { id -> viewModel.deleteTranscription(id) },
+				)
 			}
-
-			Spacer(modifier = Modifier.height(24.dp))
 		}
 	}
 
-	// Speaker label sheet.
 	labelingSegment?.let { segment ->
 		SpeakerLabelSheet(
 			segment = segment,
@@ -257,8 +237,204 @@ fun AudioScribeScreen(
 }
 
 @Composable
+private fun ScribeTab(
+	uiState: AudioScribeUiState,
+	onPickFile: () -> Unit,
+	onModelSelected: (String) -> Unit,
+	onUnknownSpeakerClicked: (TranscriptSegment) -> Unit,
+) {
+	val scrollState = rememberScrollState()
+
+	Column(
+		modifier = Modifier
+			.fillMaxSize()
+			.verticalScroll(scrollState),
+	) {
+		// Whisper model selector.
+		WhisperConfigCard(
+			selectedModel = uiState.selectedWhisperModel,
+			isReady = uiState.whisperModelReady,
+			isInitializing = uiState.isInitializing,
+			onModelSelected = onModelSelected,
+		)
+
+		Spacer(modifier = Modifier.height(8.dp))
+
+		uiState.error?.let { error ->
+			Text(
+				error,
+				style = MaterialTheme.typography.bodySmall,
+				color = MaterialTheme.colorScheme.error,
+				modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+			)
+		}
+
+		when {
+			uiState.isProcessing -> ProcessingState(
+				phase = uiState.processingPhase ?: "Processing...",
+				eta = uiState.etaText,
+			)
+			uiState.transcriptSegments != null -> {
+				TranscriptCard(
+					segments = uiState.transcriptSegments,
+					onUnknownSpeakerClicked = onUnknownSpeakerClicked,
+				)
+				uiState.summaryText?.let { summary ->
+					Spacer(modifier = Modifier.height(12.dp))
+					SummaryCard(summary = summary)
+				}
+			}
+			else -> EmptyState(onPickFile = onPickFile)
+		}
+
+		Spacer(modifier = Modifier.height(24.dp))
+	}
+}
+
+@Composable
+private fun HistoryTab(
+	transcriptions: List<Transcription>,
+	onTranscriptionClicked: (String) -> Unit,
+	onDeleteClicked: (String) -> Unit,
+) {
+	if (transcriptions.isEmpty()) {
+		Box(
+			modifier = Modifier.fillMaxSize(),
+			contentAlignment = Alignment.Center,
+		) {
+			Column(horizontalAlignment = Alignment.CenterHorizontally) {
+				Icon(
+					Icons.Outlined.History,
+					contentDescription = null,
+					tint = MaterialTheme.colorScheme.outline,
+					modifier = Modifier.size(48.dp),
+				)
+				Spacer(modifier = Modifier.height(12.dp))
+				Text(
+					"No transcriptions yet",
+					style = MaterialTheme.typography.bodyLarge,
+					color = MaterialTheme.colorScheme.outline,
+				)
+			}
+		}
+	} else {
+		Column(
+			modifier = Modifier
+				.fillMaxSize()
+				.verticalScroll(rememberScrollState())
+				.padding(16.dp),
+			verticalArrangement = Arrangement.spacedBy(8.dp),
+		) {
+			transcriptions.forEach { transcription ->
+				TranscriptionHistoryItem(
+					transcription = transcription,
+					onClick = { onTranscriptionClicked(transcription.id) },
+					onDelete = { onDeleteClicked(transcription.id) },
+				)
+			}
+		}
+	}
+}
+
+@Composable
+private fun TranscriptionHistoryItem(
+	transcription: Transcription,
+	onClick: () -> Unit,
+	onDelete: () -> Unit,
+) {
+	val relativeTime = remember(transcription.createdMs) {
+		val diff = System.currentTimeMillis() - transcription.createdMs
+		when {
+			diff < 60_000 -> "Just now"
+			diff < 3600_000 -> "${diff / 60_000}m ago"
+			diff < 86400_000 -> "${diff / 3600_000}h ago"
+			else -> "${diff / 86400_000}d ago"
+		}
+	}
+
+	val durationText = remember(transcription.durationMs) {
+		val totalSec = transcription.durationMs / 1000
+		when {
+			totalSec < 60 -> "${totalSec}s"
+			totalSec < 3600 -> "${totalSec / 60}m ${totalSec % 60}s"
+			else -> "${totalSec / 3600}h ${(totalSec % 3600) / 60}m"
+		}
+	}
+
+	Card(
+		modifier = Modifier
+			.fillMaxWidth()
+			.clip(RoundedCornerShape(12.dp))
+			.clickable(onClick = onClick),
+		shape = RoundedCornerShape(12.dp),
+		colors = CardDefaults.cardColors(
+			containerColor = MaterialTheme.customColors.taskCardBgColor,
+		),
+	) {
+		Row(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(12.dp),
+			verticalAlignment = Alignment.CenterVertically,
+		) {
+			Column(modifier = Modifier.weight(1f)) {
+				Text(
+					transcription.title,
+					style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+					color = MaterialTheme.colorScheme.onSurface,
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+				)
+				Row(
+					horizontalArrangement = Arrangement.spacedBy(8.dp),
+					verticalAlignment = Alignment.CenterVertically,
+				) {
+					Text(
+						relativeTime,
+						style = MaterialTheme.typography.labelSmall,
+						color = MaterialTheme.colorScheme.outline,
+					)
+					Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+					Text(
+						durationText,
+						style = MaterialTheme.typography.labelSmall,
+						color = MaterialTheme.colorScheme.outline,
+					)
+					Text("·", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+					Text(
+						transcription.whisperModel.uppercase(),
+						style = MaterialTheme.typography.labelSmall,
+						color = MaterialTheme.colorScheme.primary,
+					)
+				}
+				if (transcription.summary != null) {
+					Text(
+						transcription.summary,
+						style = MaterialTheme.typography.bodySmall,
+						color = MaterialTheme.colorScheme.onSurfaceVariant,
+						maxLines = 2,
+						overflow = TextOverflow.Ellipsis,
+						modifier = Modifier.padding(top = 4.dp),
+					)
+				}
+			}
+			IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+				Icon(
+					Icons.Outlined.Delete,
+					contentDescription = "Delete",
+					tint = MaterialTheme.colorScheme.outline,
+					modifier = Modifier.size(18.dp),
+				)
+			}
+		}
+	}
+}
+
+@Composable
 private fun WhisperConfigCard(
 	selectedModel: String,
+	isReady: Boolean,
+	isInitializing: Boolean,
 	onModelSelected: (String) -> Unit,
 ) {
 	val options = remember {
@@ -278,32 +454,41 @@ private fun WhisperConfigCard(
 			containerColor = MaterialTheme.customColors.taskCardBgColor,
 		),
 	) {
-		Row(
-			modifier = Modifier
-				.fillMaxWidth()
-				.padding(horizontal = 16.dp, vertical = 12.dp),
-			verticalAlignment = Alignment.CenterVertically,
-			horizontalArrangement = Arrangement.SpaceBetween,
+		Column(
+			modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
 		) {
-			Text(
-				"Whisper",
-				style = MaterialTheme.typography.labelLarge,
-				color = MaterialTheme.colorScheme.onSurface,
-			)
-			WhisperModelSelector(
-				options = options,
-				selectedKey = selectedModel,
-				onSelected = onModelSelected,
-			)
+			Row(
+				modifier = Modifier.fillMaxWidth(),
+				verticalAlignment = Alignment.CenterVertically,
+				horizontalArrangement = Arrangement.SpaceBetween,
+			) {
+				Row(verticalAlignment = Alignment.CenterVertically) {
+					Text(
+						"Whisper",
+						style = MaterialTheme.typography.labelLarge,
+						color = MaterialTheme.colorScheme.onSurface,
+					)
+					Spacer(modifier = Modifier.width(8.dp))
+					if (isInitializing) {
+						CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+						Spacer(modifier = Modifier.width(4.dp))
+						Text("Loading...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+					} else if (isReady) {
+						Text("Ready", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+					}
+				}
+				WhisperModelSelector(
+					options = options,
+					selectedKey = selectedModel,
+					onSelected = onModelSelected,
+				)
+			}
 		}
 	}
 }
 
 @Composable
-private fun EmptyState(
-	onPickFile: () -> Unit,
-	onRecord: () -> Unit,
-) {
+private fun EmptyState(onPickFile: () -> Unit) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -313,18 +498,10 @@ private fun EmptyState(
 		verticalArrangement = Arrangement.spacedBy(24.dp),
 	) {
 		Box(
-			modifier = Modifier
-				.size(80.dp)
-				.clip(CircleShape)
-				.background(MaterialTheme.colorScheme.primaryContainer),
+			modifier = Modifier.size(80.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
 			contentAlignment = Alignment.Center,
 		) {
-			Icon(
-				Icons.Rounded.Mic,
-				contentDescription = null,
-				tint = MaterialTheme.colorScheme.onPrimaryContainer,
-				modifier = Modifier.size(40.dp),
-			)
+			Icon(Icons.Rounded.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(40.dp))
 		}
 
 		Text(
@@ -343,86 +520,43 @@ private fun EmptyState(
 
 		Spacer(modifier = Modifier.height(8.dp))
 
-		Column(
+		OutlinedButton(
+			onClick = onPickFile,
 			modifier = Modifier.fillMaxWidth(),
-			verticalArrangement = Arrangement.spacedBy(12.dp),
+			shape = RoundedCornerShape(16.dp),
 		) {
-			OutlinedButton(
-				onClick = onPickFile,
-				modifier = Modifier.fillMaxWidth(),
-				shape = RoundedCornerShape(16.dp),
-			) {
-				Icon(
-					Icons.Outlined.AudioFile,
-					contentDescription = null,
-					modifier = Modifier.size(20.dp),
-				)
-				Text("  Pick audio or video file")
-			}
-
-			OutlinedButton(
-				onClick = onRecord,
-				modifier = Modifier.fillMaxWidth(),
-				shape = RoundedCornerShape(16.dp),
-			) {
-				Icon(
-					Icons.Rounded.Mic,
-					contentDescription = null,
-					modifier = Modifier.size(20.dp),
-				)
-				Text("  Record a clip")
-			}
+			Icon(Icons.Outlined.AudioFile, contentDescription = null, modifier = Modifier.size(20.dp))
+			Text("  Pick audio or video file")
 		}
 	}
 }
 
 @Composable
-private fun ProcessingState(phase: String) {
+private fun ProcessingState(phase: String, eta: String?) {
 	Column(
-		modifier = Modifier
-			.fillMaxWidth()
-			.padding(top = 80.dp),
+		modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
 		horizontalAlignment = Alignment.CenterHorizontally,
-		verticalArrangement = Arrangement.spacedBy(16.dp),
+		verticalArrangement = Arrangement.spacedBy(12.dp),
 	) {
-		CircularProgressIndicator(
-			modifier = Modifier.size(48.dp),
-			strokeWidth = 3.dp,
-			color = MaterialTheme.colorScheme.primary,
-		)
-		Text(
-			phase,
-			style = MaterialTheme.typography.bodyLarge,
-			color = MaterialTheme.colorScheme.onSurface,
-		)
+		CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary)
+		Text(phase, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+		if (eta != null) {
+			Text(eta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+		}
 	}
 }
 
 @Composable
-private fun TranscriptCard(
-	segments: List<TranscriptSegment>,
-	onUnknownSpeakerClicked: (TranscriptSegment) -> Unit,
-) {
+private fun TranscriptCard(segments: List<TranscriptSegment>, onUnknownSpeakerClicked: (TranscriptSegment) -> Unit) {
 	Card(
-		modifier = Modifier
-			.fillMaxWidth()
-			.padding(horizontal = 16.dp),
+		modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
 		shape = RoundedCornerShape(16.dp),
-		colors = CardDefaults.cardColors(
-			containerColor = MaterialTheme.customColors.taskCardBgColor,
-		),
+		colors = CardDefaults.cardColors(containerColor = MaterialTheme.customColors.taskCardBgColor),
 	) {
 		Column(modifier = Modifier.padding(16.dp)) {
-			Text(
-				"Transcript",
-				style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
-				color = MaterialTheme.colorScheme.onSurface,
-			)
+			Text("Transcript", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface)
 			Spacer(modifier = Modifier.height(12.dp))
-			TranscriptView(
-				segments = segments,
-				onUnknownSpeakerClicked = onUnknownSpeakerClicked,
-			)
+			TranscriptView(segments = segments, onUnknownSpeakerClicked = onUnknownSpeakerClicked)
 		}
 	}
 }
@@ -430,26 +564,19 @@ private fun TranscriptCard(
 @Composable
 private fun SummaryCard(summary: String) {
 	Card(
-		modifier = Modifier
-			.fillMaxWidth()
-			.padding(horizontal = 16.dp),
+		modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
 		shape = RoundedCornerShape(16.dp),
-		colors = CardDefaults.cardColors(
-			containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-		),
+		colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
 	) {
 		Column(modifier = Modifier.padding(16.dp)) {
-			Text(
-				"Summary",
-				style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
-				color = MaterialTheme.colorScheme.primary,
-			)
+			Text("Summary", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.primary)
 			Spacer(modifier = Modifier.height(8.dp))
-			Text(
-				summary,
-				style = MaterialTheme.typography.bodyMedium,
-				color = MaterialTheme.colorScheme.onSurface,
-			)
+			Text(summary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
 		}
 	}
+}
+
+private fun buildShareText(segments: List<TranscriptSegment>?, summary: String?): String {
+	val transcript = segments?.joinToString("\n") { "${it.speakerName} [${it.formatTimestamp()}]: ${it.text}" } ?: ""
+	return if (summary != null) "SUMMARY:\n$summary\n\nTRANSCRIPT:\n$transcript" else transcript
 }

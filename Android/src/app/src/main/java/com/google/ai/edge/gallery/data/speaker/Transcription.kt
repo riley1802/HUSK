@@ -16,15 +16,21 @@
 
 package com.google.ai.edge.gallery.data.speaker
 
-import androidx.room.Database
-import androidx.room.RoomDatabase
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 
-@Database(
-	entities = [SpeakerProfile::class, Transcription::class],
-	version = 2,
-	exportSchema = false,
+/**
+ * Room entity for a saved transcription.
+ */
+@Entity(tableName = "transcriptions")
+data class Transcription(
+	@PrimaryKey val id: String,
+	val title: String,
+	@ColumnInfo(name = "transcript_json") val transcriptJson: String,
+	val summary: String?,
+	@ColumnInfo(name = "duration_ms") val durationMs: Long,
+	@ColumnInfo(name = "whisper_model") val whisperModel: String,
+	@ColumnInfo(name = "created_ms") val createdMs: Long,
+	@ColumnInfo(name = "source_name") val sourceName: String?,
 )
-abstract class SpeakerDatabase : RoomDatabase() {
-	abstract fun speakerProfileDao(): SpeakerProfileDao
-	abstract fun transcriptionDao(): TranscriptionDao
-}

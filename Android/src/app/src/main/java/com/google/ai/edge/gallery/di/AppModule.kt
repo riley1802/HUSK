@@ -53,6 +53,7 @@ import com.google.ai.edge.gallery.data.speaker.SpeakerDatabase
 import com.google.ai.edge.gallery.data.speaker.SpeakerDiarizationEngine
 import com.google.ai.edge.gallery.data.speaker.SpeakerEmbeddingManager
 import com.google.ai.edge.gallery.data.speaker.SpeakerProfileDao
+import com.google.ai.edge.gallery.data.speaker.TranscriptionDao
 import com.google.ai.edge.gallery.proto.BenchmarkResults
 import com.google.ai.edge.gallery.proto.McpServerRegistry
 import com.google.ai.edge.gallery.proto.CutoutCollection
@@ -278,7 +279,7 @@ internal object AppModule {
       context,
       SpeakerDatabase::class.java,
       "husk_speakers.db",
-    ).build()
+    ).fallbackToDestructiveMigration().build()
   }
 
   // Provides SpeakerProfileDao
@@ -288,6 +289,15 @@ internal object AppModule {
     database: SpeakerDatabase,
   ): SpeakerProfileDao {
     return database.speakerProfileDao()
+  }
+
+  // Provides TranscriptionDao
+  @Provides
+  @Singleton
+  fun provideTranscriptionDao(
+    database: SpeakerDatabase,
+  ): TranscriptionDao {
+    return database.transcriptionDao()
   }
 
   // Provides SpeakerDiarizationEngine

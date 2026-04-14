@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery.ui.audioscribe
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -28,6 +29,8 @@ import com.google.ai.edge.gallery.data.speaker.SpeakerDiarizationEngine
 import com.google.ai.edge.gallery.data.speaker.SpeakerEmbeddingManager
 import com.google.ai.edge.gallery.data.speaker.SpeakerProfile
 import com.google.ai.edge.gallery.data.speaker.SpeakerProfileDao
+import com.google.ai.edge.gallery.data.speaker.Transcription
+import com.google.ai.edge.gallery.data.speaker.TranscriptionDao
 import com.google.ai.edge.gallery.runtime.WhisperModelHelper
 import com.google.ai.edge.gallery.runtime.runtimeHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 data class AudioScribeUiState(
@@ -49,23 +53,24 @@ data class AudioScribeUiState(
 	val isProcessing: Boolean = false,
 	val processingPhase: String? = null,
 	val processingProgress: Float = 0f,
+	val etaText: String? = null,
 
 	// Results.
 	val transcriptSegments: List<TranscriptSegment>? = null,
 	val summaryText: String? = null,
 	val error: String? = null,
+
+	// History.
+	val transcriptions: List<Transcription> = emptyList(),
 )
 
-/**
- * ViewModel for Audio Scribe — manages Whisper transcription, speaker diarization,
- * and Gemma E4B summary generation.
- */
 @HiltViewModel
 class AudioScribeViewModel @Inject constructor(
 	private val dataStoreRepository: DataStoreRepository,
 	private val speakerEmbeddingManager: SpeakerEmbeddingManager,
 	val diarizationEngine: SpeakerDiarizationEngine,
 	private val speakerProfileDao: SpeakerProfileDao,
+	private val transcriptionDao: TranscriptionDao,
 ) : ViewModel() {
 
 	companion object {
@@ -81,6 +86,7 @@ class AudioScribeViewModel @Inject constructor(
 		val savedModel = dataStoreRepository.readWhisperSelectedModel()
 		_uiState.update { it.copy(selectedWhisperModel = savedModel) }
 		loadSpeakerProfiles()
+		loadTranscriptionHistory()
 	}
 
 	fun selectWhisperModel(modelKey: String) {
@@ -88,18 +94,26 @@ class AudioScribeViewModel @Inject constructor(
 		dataStoreRepository.saveWhisperSelectedModel(modelKey)
 	}
 
-	fun initializeWhisper(context: Context, whisperModelPath: String) {
-		_uiState.update { it.copy(isInitializing = true) }
+	/**
+	 * Initialize Whisper from a Model object (checks download status and loads).
+	 */
+	fun initializeWhisperFromModel(context: Context, model: Model) {
+		val path = model.getPath(context)
+		val file = java.io.File(path)
+		if (!file.exists()) {
+			Log.e(TAG, "Whisper model not found at $path")
+			_uiState.update { it.copy(whisperModelReady = false, error = "Whisper model not downloaded. Please download from the model manager.") }
+			return
+		}
+		_uiState.update { it.copy(isInitializing = true, error = null) }
 		viewModelScope.launch(Dispatchers.IO) {
-			WhisperModelHelper.initialize(context, whisperModelPath) { error ->
+			WhisperModelHelper.initialize(context, path) { error ->
 				_uiState.update {
 					it.copy(
 						whisperModelReady = error.isEmpty(),
 						isInitializing = false,
+						error = error.ifEmpty { null },
 					)
-				}
-				if (error.isNotEmpty()) {
-					Log.e(TAG, "Failed to initialize Whisper: $error")
 				}
 			}
 		}
@@ -111,11 +125,8 @@ class AudioScribeViewModel @Inject constructor(
 	}
 
 	/**
-	 * Process an audio/video file through the full pipeline:
-	 * 1. Decode any format to PCM
-	 * 2. Whisper transcription
-	 * 3. Speaker diarization
-	 * 4. Gemma E4B summary (if < 10 min)
+	 * Process audio through: decode -> transcribe -> diarize -> summarize.
+	 * Includes adaptive ETA estimation.
 	 */
 	fun processAudioFile(
 		context: Context,
@@ -123,11 +134,14 @@ class AudioScribeViewModel @Inject constructor(
 		gemmaE4bModel: Model?,
 	) {
 		viewModelScope.launch(Dispatchers.Default) {
+			val sourceName = getFileName(context, uri)
+
 			_uiState.update {
 				it.copy(
 					isProcessing = true,
 					processingPhase = "Extracting audio...",
 					processingProgress = 0f,
+					etaText = "Estimating...",
 					transcriptSegments = null,
 					summaryText = null,
 					error = null,
@@ -135,7 +149,7 @@ class AudioScribeViewModel @Inject constructor(
 			}
 
 			try {
-				// Phase 1: Decode audio.
+				// Phase 1: Decode.
 				val decoder = AudioDecoder(context)
 				val decoded = decoder.decode(uri) { progress ->
 					_uiState.update { it.copy(processingProgress = progress) }
@@ -143,27 +157,32 @@ class AudioScribeViewModel @Inject constructor(
 
 				if (decoded == null) {
 					_uiState.update {
-						it.copy(isProcessing = false, processingPhase = null, error = "Failed to decode audio file")
+						it.copy(isProcessing = false, processingPhase = null, etaText = null, error = "Failed to decode audio file")
 					}
 					return@launch
 				}
 
 				Log.d(TAG, "Decoded: ${decoded.samples.size} samples, ${decoded.durationMs}ms")
 
-				// Phase 2: Transcribe with Whisper in chunks for long audio.
-				_uiState.update { it.copy(processingPhase = "Transcribing...") }
+				// Check Whisper is loaded.
+				if (!WhisperModelHelper.isLoaded) {
+					_uiState.update {
+						it.copy(isProcessing = false, processingPhase = null, etaText = null, error = "Whisper model not loaded")
+					}
+					return@launch
+				}
 
-				val segments = transcribeInChunks(decoded.samples, decoded.durationMs)
+				// Phase 2: Transcribe with ETA.
+				val segments = transcribeWithEta(decoded.samples, decoded.durationMs)
 				if (segments.isEmpty()) {
 					_uiState.update {
-						it.copy(isProcessing = false, processingPhase = null, error = "Transcription produced no results")
+						it.copy(isProcessing = false, processingPhase = null, etaText = null, error = "Transcription produced no results. Is the Whisper model loaded?")
 					}
 					return@launch
 				}
 
 				// Phase 3: Speaker diarization.
-				_uiState.update { it.copy(processingPhase = "Identifying speakers...") }
-
+				_uiState.update { it.copy(processingPhase = "Identifying speakers...", etaText = null) }
 				val diarized = diarizationEngine.diarize(segments, decoded.samples)
 				val transcriptSegments = diarized.map { ds ->
 					TranscriptSegment(
@@ -176,66 +195,105 @@ class AudioScribeViewModel @Inject constructor(
 					)
 				}
 
-				_uiState.update {
-					it.copy(
-						transcriptSegments = transcriptSegments,
-						processingPhase = null,
-					)
-				}
+				_uiState.update { it.copy(transcriptSegments = transcriptSegments, processingPhase = null) }
 
-				// Phase 4: Generate summary with Gemma E4B if < 10 minutes.
+				// Save transcription to history.
+				val transcriptionId = UUID.randomUUID().toString()
+				val title = sourceName ?: "Transcription ${java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US).format(java.util.Date())}"
+				transcriptionDao.insert(
+					Transcription(
+						id = transcriptionId,
+						title = title,
+						transcriptJson = TranscriptSegment.toJson(transcriptSegments),
+						summary = null,
+						durationMs = decoded.durationMs,
+						whisperModel = _uiState.value.selectedWhisperModel,
+						createdMs = System.currentTimeMillis(),
+						sourceName = sourceName,
+					)
+				)
+				loadTranscriptionHistory()
+
+				// Phase 4: Summary with Gemma E4B if < 10 min.
 				if (decoded.durationMs <= SUMMARY_MAX_DURATION_MS && gemmaE4bModel != null) {
 					_uiState.update { it.copy(processingPhase = "Generating summary...") }
-					generateSummary(gemmaE4bModel, transcriptSegments)
+					val summary = generateSummary(gemmaE4bModel, transcriptSegments)
+					if (summary != null) {
+						transcriptionDao.updateSummary(transcriptionId, summary)
+						loadTranscriptionHistory()
+					}
 				}
 
-				_uiState.update { it.copy(isProcessing = false, processingPhase = null) }
+				_uiState.update { it.copy(isProcessing = false, processingPhase = null, etaText = null) }
 			} catch (e: Exception) {
 				Log.e(TAG, "Error processing audio", e)
 				_uiState.update {
-					it.copy(
-						isProcessing = false,
-						processingPhase = null,
-						error = "Processing error: ${e.message}",
-					)
+					it.copy(isProcessing = false, processingPhase = null, etaText = null, error = "Processing error: ${e.message}")
 				}
 			}
 		}
 	}
 
 	/**
-	 * Transcribe audio in chunks to avoid OOM on long recordings.
-	 * Whisper processes optimally in ~30 second windows.
+	 * Transcribe with adaptive ETA estimation.
+	 * Starts with a conservative overestimate and adjusts based on actual chunk timing.
 	 */
-	private suspend fun transcribeInChunks(
+	private suspend fun transcribeWithEta(
 		samples: FloatArray,
 		durationMs: Long,
 	): List<WhisperModelHelper.TranscriptSegment> {
-		// For short audio (< 5 min), process in one shot.
 		val chunkDurationSamples = 30 * 16000 // 30 seconds at 16kHz
-		if (samples.size <= chunkDurationSamples * 10) { // < ~5 min
+
+		// Short audio — single shot, no ETA needed.
+		if (samples.size <= chunkDurationSamples * 10) {
+			_uiState.update { it.copy(processingPhase = "Transcribing...", etaText = null) }
 			return WhisperModelHelper.transcribe(samples)
 		}
 
-		// For long audio, process in 30-second chunks.
-		Log.d(TAG, "Long audio (${durationMs / 1000}s), transcribing in chunks")
+		val totalChunks = (samples.size + chunkDurationSamples - 1) / chunkDurationSamples
 		val allSegments = mutableListOf<WhisperModelHelper.TranscriptSegment>()
+
+		// Initial overestimate: assume ~12 seconds per chunk (conservative).
+		var estimatedSecsPerChunk = 12.0
+		val chunkTimes = mutableListOf<Long>()
+
 		var offset = 0
 		var chunkIndex = 0
-		val totalChunks = (samples.size + chunkDurationSamples - 1) / chunkDurationSamples
 
 		while (offset < samples.size) {
 			val end = minOf(offset + chunkDurationSamples, samples.size)
 			val chunk = samples.copyOfRange(offset, end)
 			val chunkOffsetMs = (offset.toLong() * 1000L) / 16000L
 
+			// Calculate ETA.
+			val remainingChunks = totalChunks - chunkIndex
+			val etaSecs = (remainingChunks * estimatedSecsPerChunk).toInt()
+			val etaText = formatEta(etaSecs)
+
 			_uiState.update {
-				it.copy(processingPhase = "Transcribing chunk ${chunkIndex + 1}/$totalChunks...")
+				it.copy(
+					processingPhase = "Transcribing ${chunkIndex + 1}/$totalChunks",
+					etaText = etaText,
+				)
 			}
 
+			val chunkStart = System.currentTimeMillis()
 			val chunkSegments = WhisperModelHelper.transcribe(chunk)
+			val chunkElapsed = System.currentTimeMillis() - chunkStart
 
-			// Adjust timestamps to be relative to the full audio.
+			chunkTimes.add(chunkElapsed)
+
+			// Update estimate with exponential moving average (recent chunks weighted more).
+			val recentAvg = if (chunkTimes.size <= 3) {
+				chunkTimes.average() / 1000.0
+			} else {
+				// Use last 5 chunks for EMA.
+				val recent = chunkTimes.takeLast(5)
+				recent.average() / 1000.0
+			}
+			estimatedSecsPerChunk = recentAvg
+
+			// Adjust timestamps relative to full audio.
 			for (seg in chunkSegments) {
 				allSegments.add(
 					WhisperModelHelper.TranscriptSegment(
@@ -253,7 +311,23 @@ class AudioScribeViewModel @Inject constructor(
 		return allSegments
 	}
 
-	private suspend fun generateSummary(model: Model, segments: List<TranscriptSegment>) {
+	private fun formatEta(totalSeconds: Int): String {
+		return when {
+			totalSeconds < 60 -> "~${totalSeconds}s remaining"
+			totalSeconds < 3600 -> {
+				val min = totalSeconds / 60
+				val sec = totalSeconds % 60
+				"~${min}m ${sec}s remaining"
+			}
+			else -> {
+				val hr = totalSeconds / 3600
+				val min = (totalSeconds % 3600) / 60
+				"~${hr}h ${min}m remaining"
+			}
+		}
+	}
+
+	private suspend fun generateSummary(model: Model, segments: List<TranscriptSegment>): String? {
 		try {
 			val transcriptText = segments.joinToString("\n") { seg ->
 				"${seg.speakerName}: ${seg.text}"
@@ -272,30 +346,56 @@ class AudioScribeViewModel @Inject constructor(
 				}
 			}
 
-			val cleanUpListener: () -> Unit = {}
-			val errorListener: (String) -> Unit = { message ->
-				Log.e(TAG, "Summary generation error: $message")
-			}
-
 			model.runtimeHelper.runInference(
 				model = model,
 				input = prompt,
 				resultListener = resultListener,
-				cleanUpListener = cleanUpListener,
-				onError = errorListener,
+				cleanUpListener = {},
+				onError = { Log.e(TAG, "Summary error: $it") },
 			)
+
+			return summaryBuilder.toString().ifEmpty { null }
 		} catch (e: Exception) {
 			Log.e(TAG, "Error generating summary", e)
+			return null
 		}
 	}
 
 	fun clearResults() {
 		_uiState.update {
-			it.copy(
-				transcriptSegments = null,
-				summaryText = null,
-				error = null,
-			)
+			it.copy(transcriptSegments = null, summaryText = null, error = null)
+		}
+	}
+
+	/**
+	 * Load a saved transcription by ID.
+	 */
+	fun loadTranscription(id: String) {
+		viewModelScope.launch(Dispatchers.IO) {
+			val transcription = transcriptionDao.getById(id) ?: return@launch
+			val segments = TranscriptSegment.fromJson(transcription.transcriptJson)
+			_uiState.update {
+				it.copy(
+					transcriptSegments = segments,
+					summaryText = transcription.summary,
+					error = null,
+				)
+			}
+		}
+	}
+
+	fun deleteTranscription(id: String) {
+		viewModelScope.launch(Dispatchers.IO) {
+			transcriptionDao.delete(id)
+			loadTranscriptionHistory()
+		}
+	}
+
+	private fun loadTranscriptionHistory() {
+		viewModelScope.launch(Dispatchers.IO) {
+			transcriptionDao.getAll().collect { list ->
+				_uiState.update { it.copy(transcriptions = list) }
+			}
 		}
 	}
 
@@ -306,21 +406,40 @@ class AudioScribeViewModel @Inject constructor(
 		}
 	}
 
-	fun labelSpeaker(
-		embedding: FloatArray,
-		name: String,
-		existingProfileId: String?,
-	) {
+	fun labelSpeaker(embedding: FloatArray, name: String, existingProfileId: String?) {
 		viewModelScope.launch(Dispatchers.IO) {
 			diarizationEngine.labelSpeaker(embedding, name, existingProfileId)
 			loadSpeakerProfiles()
 		}
 	}
 
-	/**
-	 * Find the Gemma 4 E4B model from the available models.
-	 */
 	fun findGemmaE4b(models: List<Model>): Model? {
 		return models.find { it.name == GEMMA_E4B_MODEL_NAME }
+	}
+
+	/**
+	 * Find the Whisper model object matching the selected key.
+	 */
+	fun findWhisperModel(models: List<Model>): Model? {
+		val key = _uiState.value.selectedWhisperModel
+		val name = when (key) {
+			"tiny" -> "Whisper-Tiny"
+			"base" -> "Whisper-Base"
+			"small" -> "Whisper-Small"
+			else -> "Whisper-Base"
+		}
+		return models.find { it.name == name }
+	}
+
+	private fun getFileName(context: Context, uri: Uri): String? {
+		return try {
+			context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+				val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+				cursor.moveToFirst()
+				if (nameIndex >= 0) cursor.getString(nameIndex) else null
+			}
+		} catch (e: Exception) {
+			null
+		}
 	}
 }
