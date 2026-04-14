@@ -25,6 +25,7 @@ import com.google.ai.edge.gallery.AppLifecycleProvider
 import com.google.ai.edge.gallery.BenchmarkResultsSerializer
 import com.google.ai.edge.gallery.CutoutsSerializer
 import com.google.ai.edge.gallery.GalleryLifecycleProvider
+import com.google.ai.edge.gallery.HotMemorySerializer
 import com.google.ai.edge.gallery.SettingsSerializer
 import com.google.ai.edge.gallery.SkillsSerializer
 import com.google.ai.edge.gallery.UserDataSerializer
@@ -32,8 +33,10 @@ import com.google.ai.edge.gallery.data.DataStoreRepository
 import com.google.ai.edge.gallery.data.DefaultDataStoreRepository
 import com.google.ai.edge.gallery.data.DefaultDownloadRepository
 import com.google.ai.edge.gallery.data.DownloadRepository
+import com.google.ai.edge.gallery.data.memory.HotMemoryStore
 import com.google.ai.edge.gallery.proto.BenchmarkResults
 import com.google.ai.edge.gallery.proto.CutoutCollection
+import com.google.ai.edge.gallery.proto.HotMemory
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.Skills
 import com.google.ai.edge.gallery.proto.UserData
@@ -81,6 +84,13 @@ internal object AppModule {
   @Singleton
   fun provideSkillsSerializer(): Serializer<Skills> {
     return SkillsSerializer
+  }
+
+  // Provides the HotMemorySerializer
+  @Provides
+  @Singleton
+  fun provideHotMemorySerializer(): Serializer<HotMemory> {
+    return HotMemorySerializer
   }
 
   // Provides DataStore<Settings>
@@ -146,6 +156,28 @@ internal object AppModule {
       serializer = skillsSerializer,
       produceFile = { context.dataStoreFile("skills.pb") },
     )
+  }
+
+  // Provides DataStore<HotMemory>
+  @Provides
+  @Singleton
+  fun provideHotMemoryDataStore(
+    @ApplicationContext context: Context,
+    hotMemorySerializer: Serializer<HotMemory>,
+  ): DataStore<HotMemory> {
+    return DataStoreFactory.create(
+      serializer = hotMemorySerializer,
+      produceFile = { context.dataStoreFile("hot_memory.pb") },
+    )
+  }
+
+  // Provides HotMemoryStore
+  @Provides
+  @Singleton
+  fun provideHotMemoryStore(
+    hotMemoryDataStore: DataStore<HotMemory>,
+  ): HotMemoryStore {
+    return HotMemoryStore(hotMemoryDataStore)
   }
 
   // Provides AppLifecycleProvider

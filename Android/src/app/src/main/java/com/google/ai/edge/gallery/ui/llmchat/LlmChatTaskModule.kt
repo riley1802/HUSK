@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
@@ -41,9 +42,14 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.memory.HotMemoryStore
+import com.google.ai.edge.gallery.data.memory.MemoryToolSet
 import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.theme.emptyStateContent
 import com.google.ai.edge.gallery.ui.theme.emptyStateTitle
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.tool
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -55,7 +61,11 @@ import kotlinx.coroutines.CoroutineScope
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // AI Chat.
 
-class LlmChatTask @Inject constructor() : CustomTask {
+class LlmChatTask(
+  private val hotMemoryStore: HotMemoryStore,
+) : CustomTask {
+  private val memoryToolSet = MemoryToolSet(hotMemoryStore)
+
   override val task: Task =
     Task(
       id = BuiltInTaskId.LLM_CHAT,
@@ -71,6 +81,21 @@ class LlmChatTask @Inject constructor() : CustomTask {
       textInputPlaceHolderRes = R.string.text_input_placeholder_llm_chat,
     )
 
+  private fun buildSystemInstruction(): Contents? {
+    val memoryBlock = hotMemoryStore.serializeForSystemPrompt() ?: return null
+    val systemPrompt = buildString {
+      appendLine(memoryBlock)
+      appendLine()
+      appendLine("You have memory tools available. Use them proactively:")
+      appendLine("- When you learn important information about the user, save it with promoteToL1.")
+      appendLine("- When information changes, update it with updateL1.")
+      appendLine("- When something is no longer relevant, demote it with demoteFromL1.")
+      appendLine("- Use listL1 to review what you currently remember.")
+      appendLine("Do not ask the user for information you can look up or remember.")
+    }
+    return Contents.of(listOf(Content.Text(systemPrompt)))
+  }
+
   override fun initializeModelFn(
     context: Context,
     coroutineScope: CoroutineScope,
@@ -83,6 +108,8 @@ class LlmChatTask @Inject constructor() : CustomTask {
       supportImage = false,
       supportAudio = false,
       onDone = onDone,
+      systemInstruction = buildSystemInstruction(),
+      tools = listOf(tool(memoryToolSet)),
       coroutineScope = coroutineScope,
     )
   }
@@ -99,9 +126,19 @@ class LlmChatTask @Inject constructor() : CustomTask {
   @Composable
   override fun MainScreen(data: Any) {
     val myData = data as CustomTaskDataForBuiltinTask
+    val viewModel: LlmChatViewModel = hiltViewModel()
     LlmChatScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
+      viewModel = viewModel,
+      onResetSessionClickedOverride = { resetTask, model ->
+        viewModel.resetSession(
+          task = resetTask,
+          model = model,
+          systemInstruction = buildSystemInstruction(),
+          tools = listOf(tool(memoryToolSet)),
+        )
+      },
       emptyStateComposable = {
         Box(modifier = Modifier.fillMaxSize()) {
           Column(
@@ -125,12 +162,12 @@ class LlmChatTask @Inject constructor() : CustomTask {
 }
 
 @Module
-@InstallIn(SingletonComponent::class) // Or another component that fits your scope
+@InstallIn(SingletonComponent::class)
 internal object LlmChatTaskModule {
   @Provides
   @IntoSet
-  fun provideTask(): CustomTask {
-    return LlmChatTask()
+  fun provideTask(hotMemoryStore: HotMemoryStore): CustomTask {
+    return LlmChatTask(hotMemoryStore)
   }
 }
 
