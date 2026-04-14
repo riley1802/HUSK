@@ -97,6 +97,7 @@ dependencies {
   implementation(libs.tflite)
   implementation(libs.tflite.gpu)
   implementation(libs.tflite.support)
+  implementation(libs.onnxruntime.android)
   implementation(libs.camerax.core)
   implementation(libs.camerax.camera2)
   implementation(libs.camerax.lifecycle)

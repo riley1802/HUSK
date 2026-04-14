@@ -43,6 +43,7 @@ room = "2.7.1"
 androidxTestRunner = "1.5.2"
 androidxTestCoreKtx = "1.5.0"
 mockitoCore = "5.14.2"
+onnxruntime = "1.20.0"
 mlkit-genai-prompt = "1.0.0-beta2"  # Ref: https://developers.google.com/ml-kit/genai/prompt/android/get-started#configure-project
 
 [libraries]
@@ -104,6 +105,7 @@ androidx-room-testing = { group = "androidx.room", name = "room-testing", versio
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 androidx-test-core-ktx = { group = "androidx.test", name = "core-ktx", version.ref = "androidxTestCoreKtx" }
 mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockitoCore" }
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -12,7 +12,9 @@ package com.google.ai.edge.gallery.customtasks.ambientscribe.di
 
 import android.content.Context
 import com.google.ai.edge.gallery.customtasks.ambientscribe.inference.MoonshineTfliteEngine
+import com.google.ai.edge.gallery.customtasks.ambientscribe.inference.SileroVad
 import com.google.ai.edge.gallery.customtasks.ambientscribe.inference.TranscriptionEngine
+import com.google.ai.edge.gallery.customtasks.ambientscribe.inference.VoiceActivityDetector
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -29,4 +31,10 @@ internal object AmbientScribeInferenceModule {
 	fun provideTranscriptionEngine(
 		@ApplicationContext context: Context,
 	): TranscriptionEngine = MoonshineTfliteEngine(context)
+
+	@Provides
+	@Singleton
+	fun provideVoiceActivityDetector(
+		@ApplicationContext context: Context,
+	): VoiceActivityDetector = SileroVad(context)
 }
