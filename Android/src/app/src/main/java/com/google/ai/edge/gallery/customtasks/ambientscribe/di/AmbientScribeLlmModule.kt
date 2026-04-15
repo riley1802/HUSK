@@ -10,15 +10,17 @@
 
 package com.google.ai.edge.gallery.customtasks.ambientscribe.di
 
+import android.content.Context
 import com.google.ai.edge.gallery.customtasks.ambientscribe.llm.EventDescriptionRewriter
 import com.google.ai.edge.gallery.customtasks.ambientscribe.llm.GemmaClient
 import com.google.ai.edge.gallery.customtasks.ambientscribe.llm.GemmaEventDescriptionRewriter
+import com.google.ai.edge.gallery.customtasks.ambientscribe.llm.GemmaModelResolver
 import com.google.ai.edge.gallery.customtasks.ambientscribe.llm.LlmChatGemmaClient
-import com.google.ai.edge.gallery.data.Model
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -26,14 +28,9 @@ import javax.inject.Singleton
  * Hilt wiring for the Ambient Scribe event-rewrite pipeline.
  *
  * Binds [EventDescriptionRewriter] to its Gemma-backed implementation and provides a
- * default [GemmaClient] whose model provider currently returns null — this means the
- * client reports not-ready and the rewriter is a no-op until the model-picker integration
- * lands. Matching the Moonshine stub pattern avoids blocking Ambient Scribe on a model
- * download + selection flow that isn't plumbed yet.
- *
- * When model selection is wired, replace [provideGemmaClient]'s provider lambda with one
- * that returns the configured Gemma [Model] (e.g. via `DataStoreRepository.readImportedModels`
- * or a dedicated SelectedModelRepository).
+ * [GemmaClient] that resolves the currently-downloaded Gemma model through
+ * [GemmaModelResolver] (shared with the app's Model Manager). When no Gemma model has
+ * been downloaded the client reports not-ready and the rewriter is a no-op.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -48,9 +45,12 @@ internal abstract class AmbientScribeLlmModule {
 	companion object {
 		@Provides
 		@Singleton
-		fun provideGemmaClient(): GemmaClient =
-			// TODO(ambient-scribe): wire to the Gemma Model selected by the download/picker
-			// flow. Returning null keeps the rewriter in a safe not-ready state.
-			LlmChatGemmaClient(modelProvider = { null as Model? })
+		fun provideGemmaClient(
+			@ApplicationContext context: Context,
+			resolver: GemmaModelResolver,
+		): GemmaClient = LlmChatGemmaClient(
+			context = context,
+			modelProvider = { resolver.currentGemmaModel() },
+		)
 	}
 }
