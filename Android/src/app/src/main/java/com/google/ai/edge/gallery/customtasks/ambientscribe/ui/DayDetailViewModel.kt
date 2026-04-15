@@ -10,6 +10,7 @@
 
 package com.google.ai.edge.gallery.customtasks.ambientscribe.ui
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -50,9 +51,16 @@ class DayDetailViewModel @Inject constructor(
 	private val rewriteScheduler: RewriteScheduler,
 ) : ViewModel() {
 
-	val date: LocalDate = savedStateHandle.get<String>(ARG_DATE)
-		?.let { LocalDate.parse(it) }
-		?: error("date nav arg missing")
+	val date: LocalDate = run {
+		val raw = savedStateHandle.get<String>(ARG_DATE)
+		val parsed = runCatching { raw?.let { LocalDate.parse(it) } }.getOrNull()
+		if (parsed == null) {
+			Log.w(TAG, "Invalid or missing date nav arg, falling back to today: $raw")
+			LocalDate.now()
+		} else {
+			parsed
+		}
+	}
 
 	val transcriptSegments: StateFlow<List<TranscriptSegment>> =
 		transcriptDao.observeByDate(date)
@@ -83,5 +91,6 @@ class DayDetailViewModel @Inject constructor(
 
 	companion object {
 		const val ARG_DATE = "date"
+		private const val TAG = "DayDetailVM"
 	}
 }

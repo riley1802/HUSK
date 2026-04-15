@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -155,7 +156,10 @@ class AmbientScribeService : LifecycleService() {
 		pipelineScope.launch {
 			lifecycleMutex.withLock {
 				updateState(ServiceState.Stopping)
-				captureJob?.cancel()
+				// Wait for the capture/dispatcher job to fully unwind before closing engines —
+				// otherwise a native inference call can race with session teardown and trigger a
+				// JNI use-after-free on Silero / Moonshine.
+				captureJob?.cancelAndJoin()
 				captureJob = null
 				if (enginesInitialized) {
 					try {

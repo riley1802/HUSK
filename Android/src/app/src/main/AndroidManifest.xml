@@ -112,6 +112,22 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!--
+          Disable the default WorkManager initializer so the HiltWorkerFactory (provided via the
+          application-level Configuration.Provider) is used instead. Without this, @HiltWorker
+          workers like EventRewriteWorker cannot be instantiated.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"

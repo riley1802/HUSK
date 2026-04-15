@@ -98,8 +98,9 @@ class ChunkDispatcher(
 
 	private suspend fun processWindow(window: FloatArray, startTs: Long, endTs: Long) {
 		try {
+			val vadInput = vadSlice(window, vad.frameSize())
 			val speech = try {
-				vad.detectSpeech(window)
+				vad.detectSpeech(vadInput)
 			} catch (e: Throwable) {
 				if (e is CancellationException) throw e
 				Log.w(TAG, "VAD failed for window startTs=$startTs", e)
@@ -237,6 +238,22 @@ class ChunkDispatcher(
 			)
 		}
 		metadataDao.upsert(updated)
+	}
+
+	/**
+	 * Returns [window] truncated to the largest prefix whose length is a multiple of [frameSize].
+	 *
+	 * SileroVad (and many VAD implementations) require the input length to be a whole number of
+	 * frames. A 30s window at 16kHz is 480,000 samples, which is NOT divisible by Silero's 512-
+	 * sample frame. Passing the raw window throws IllegalArgumentException and the broad catch
+	 * in [processWindow] would force speech=false, silently disabling ASR. We truncate rather
+	 * than zero-pad so the VAD energy estimate isn't skewed; the dropped tail is ≤ frameSize-1
+	 * samples (≤ ~32ms at 16kHz @ 512 frame), which is insignificant for chunk-level gating.
+	 */
+	private fun vadSlice(window: FloatArray, frameSize: Int): FloatArray {
+		require(frameSize > 0) { "frameSize must be positive, was $frameSize" }
+		val usableSize = (window.size / frameSize) * frameSize
+		return if (usableSize == window.size) window else window.copyOf(usableSize)
 	}
 
 	companion object {

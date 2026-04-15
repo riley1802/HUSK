@@ -89,6 +89,8 @@ class ChunkDispatcherTest {
 		audioEventDao = mock(AudioEventDao::class.java)
 		metadataDao = mock(DailyMetadataDao::class.java)
 		currentTs = baseTs
+		// Default frameSize — Silero's 512-sample frame. Individual tests override as needed.
+		doAnswer { 512 }.`when`(vad).frameSize()
 	}
 
 	private fun newDispatcher(): ChunkDispatcher = ChunkDispatcher(
@@ -271,6 +273,33 @@ class ChunkDispatcherTest {
 			newDispatcher().run(audioFlow(2))
 
 			verify(audioEventDao, times(1)).insert(any())
+		}
+
+	@Test
+	fun `VAD is called with a frame-size-aligned subset of the 30s window`() =
+		runTest(StandardTestDispatcher()) {
+			// Silero-style 512-sample frame: 480000 % 512 == 256, so the dispatcher must
+			// truncate to 479744 samples before calling detectSpeech.
+			doAnswer { 512 }.`when`(vad).frameSize()
+			// Capture the FloatArray actually passed to detectSpeech via doAnswer, which is
+			// Kotlin-null-safe (unlike ArgumentCaptor.capture() on a non-null primitive array).
+			val captured = mutableListOf<FloatArray>()
+			doAnswer {
+				captured.add(it.arguments[0] as FloatArray)
+				false
+			}.`when`(vad).detectSpeech(anyFloatArray())
+			stubClassifier(emptyList())
+			doAnswer { null }.`when`(metadataDao).getByDate(any())
+
+			newDispatcher().run(audioFlow(1))
+
+			assertEquals(1, captured.size)
+			val passed = captured[0]
+			val expected = (windowSamples / 512) * 512
+			assertEquals(expected, passed.size)
+			assertEquals(0, passed.size % 512)
+			assertTrue(passed.size <= windowSamples)
+			assertTrue(windowSamples - passed.size < 512)
 		}
 
 	@Test

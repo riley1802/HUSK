@@ -106,6 +106,57 @@ class DayDetailViewModelTest {
 	}
 
 	@Test
+	fun `malformed date nav arg falls back to today without throwing`() {
+		// Stub DAOs for the fallback date (today). Under the project's frozen system date, the
+		// fallback equals the test's `date` constant, so the setUp stubs already cover it — but
+		// we re-stub explicitly against LocalDate.now() to document intent.
+		val fallback = LocalDate.now()
+		doAnswer { MutableStateFlow(emptyList<AudioEvent>()) }
+			.`when`(audioEventDao).observeByDate(fallback)
+		doAnswer {
+			MutableStateFlow(
+				emptyList<com.google.ai.edge.gallery.customtasks.ambientscribe.data.TranscriptSegment>()
+			)
+		}.`when`(transcriptDao).observeByDate(fallback)
+		runBlocking {
+			doAnswer { null }.`when`(metadataDao).getByDate(fallback)
+		}
+		val handle = SavedStateHandle(mapOf(DayDetailViewModel.ARG_DATE to "not-a-date"))
+		val vm = DayDetailViewModel(
+			savedStateHandle = handle,
+			transcriptDao = transcriptDao,
+			audioEventDao = audioEventDao,
+			metadataDao = metadataDao,
+			rewriteScheduler = rewriteScheduler,
+		)
+		assertEquals(fallback, vm.date)
+	}
+
+	@Test
+	fun `missing date nav arg falls back to today without throwing`() {
+		val fallback = LocalDate.now()
+		doAnswer { MutableStateFlow(emptyList<AudioEvent>()) }
+			.`when`(audioEventDao).observeByDate(fallback)
+		doAnswer {
+			MutableStateFlow(
+				emptyList<com.google.ai.edge.gallery.customtasks.ambientscribe.data.TranscriptSegment>()
+			)
+		}.`when`(transcriptDao).observeByDate(fallback)
+		runBlocking {
+			doAnswer { null }.`when`(metadataDao).getByDate(fallback)
+		}
+		val handle = SavedStateHandle()
+		val vm = DayDetailViewModel(
+			savedStateHandle = handle,
+			transcriptDao = transcriptDao,
+			audioEventDao = audioEventDao,
+			metadataDao = metadataDao,
+			rewriteScheduler = rewriteScheduler,
+		)
+		assertEquals(fallback, vm.date)
+	}
+
+	@Test
 	fun `hasPendingEvents is false when no events are PENDING`() = runTest(testDispatcher) {
 		audioEventsFlow.value = listOf(
 			event(1, RewriteState.DONE),
