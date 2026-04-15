@@ -296,6 +296,8 @@ class AmbientScribeService : LifecycleService() {
 
 		fun startIntent(context: Context): Intent = intentForAction(context, ACTION_START)
 
+		fun stopIntent(context: Context): Intent = intentForAction(context, ACTION_STOP)
+
 		fun intentForAction(context: Context, action: String): Intent =
 			Intent(context, AmbientScribeService::class.java).setAction(action)
 	}

@@ -89,6 +89,7 @@ dependencies {
   implementation(libs.androidx.hilt.work)
   ksp(libs.androidx.hilt.compiler)
   implementation(libs.androidx.datastore)
+  implementation(libs.androidx.datastore.preferences)
   implementation(libs.com.google.code.gson)
   implementation(libs.androidx.lifecycle.process)
   implementation(libs.androidx.lifecycle.service)
