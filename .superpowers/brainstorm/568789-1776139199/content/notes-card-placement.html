@@ -1,0 +1,121 @@
+<h2>Where should the Notes card live on the home screen?</h2>
+<p class="subtitle">The current layout: Talk (primary, tall) → Secondary grid (Tinker, Look, Listen, etc.) → Model Status Pill</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0E1013;border-radius:16px;padding:20px;font-family:system-ui;color:#E6E8EC;min-height:320px">
+        <div style="color:#A0A6B0;font-size:13px;margin-bottom:4px">Good evening.</div>
+        <div style="font-size:28px;font-weight:500;margin-bottom:12px"><span style="color:#E6E8EC">Husk</span><span style="color:#D6C9A8">AI</span></div>
+
+        <!-- Talk card -->
+        <div style="background:#D6C9A8;border-radius:16px;padding:16px;margin-bottom:10px;height:70px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="color:#0E1013;font-size:20px;font-weight:500">Talk</div>
+          <div style="color:#0E1013;opacity:0.7;font-size:11px">Start a conversation</div>
+        </div>
+
+        <!-- Notes card - same level as Talk -->
+        <div style="background:#1B1F24;border:1.5px solid #D6C9A8;border-radius:16px;padding:16px;margin-bottom:10px;height:70px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="color:#E6E8EC;font-size:20px;font-weight:500">Notes</div>
+            <div style="color:#A0A6B0;font-size:11px;background:#22272D;padding:3px 8px;border-radius:8px">🔍 Search</div>
+          </div>
+          <div style="color:#A0A6B0;font-size:11px">Brainstorm ideas with AI</div>
+        </div>
+
+        <!-- Secondary grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:#15181C;border:1px solid #2C313A;border-radius:12px;padding:10px;height:55px"><div style="color:#A0A6B0;font-size:10px">Tinker</div></div>
+          <div style="background:#15181C;border:1px solid #2C313A;border-radius:12px;padding:10px;height:55px"><div style="color:#A0A6B0;font-size:10px">Look</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Second primary card</h3>
+      <p>Notes gets its own full-width card right below Talk, visually elevated as a peer feature. Search pill embedded in the card header.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0E1013;border-radius:16px;padding:20px;font-family:system-ui;color:#E6E8EC;min-height:320px">
+        <div style="color:#A0A6B0;font-size:13px;margin-bottom:4px">Good evening.</div>
+        <div style="font-size:28px;font-weight:500;margin-bottom:12px"><span style="color:#E6E8EC">Husk</span><span style="color:#D6C9A8">AI</span></div>
+
+        <!-- Talk card -->
+        <div style="background:#D6C9A8;border-radius:16px;padding:16px;margin-bottom:10px;height:70px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="color:#0E1013;font-size:20px;font-weight:500">Talk</div>
+          <div style="color:#0E1013;opacity:0.7;font-size:11px">Start a conversation</div>
+        </div>
+
+        <!-- Secondary grid with Notes as first item -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div style="background:#15181C;border:1.5px solid #D6C9A8;border-radius:12px;padding:10px;height:65px;display:flex;flex-direction:column;justify-content:space-between">
+            <div style="color:#D6C9A8;font-size:11px">📝</div>
+            <div style="color:#E6E8EC;font-size:13px;font-weight:500">Notes</div>
+          </div>
+          <div style="background:#15181C;border:1px solid #2C313A;border-radius:12px;padding:10px;height:65px;display:flex;flex-direction:column;justify-content:space-between">
+            <div style="color:#A0A6B0;font-size:11px">⚙️</div>
+            <div style="color:#A0A6B0;font-size:13px">Tinker</div>
+          </div>
+          <div style="background:#15181C;border:1px solid #2C313A;border-radius:12px;padding:10px;height:65px;display:flex;flex-direction:column;justify-content:space-between">
+            <div style="color:#A0A6B0;font-size:11px">👁️</div>
+            <div style="color:#A0A6B0;font-size:13px">Look</div>
+          </div>
+          <div style="background:#15181C;border:1px solid #2C313A;border-radius:12px;padding:10px;height:65px;display:flex;flex-direction:column;justify-content:space-between">
+            <div style="color:#A0A6B0;font-size:11px">📋</div>
+            <div style="color:#A0A6B0;font-size:13px">Models</div>
+          </div>
+        </div>
+
+        <div style="color:#6B7280;font-size:11px;text-align:center;margin-top:4px">Search would be inside the Notes screen, not on home</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — In the secondary grid</h3>
+      <p>Notes becomes the first cell in the 2-column grid alongside Tinker, Look, etc. Smaller footprint, search lives inside the notes screen only.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0E1013;border-radius:16px;padding:20px;font-family:system-ui;color:#E6E8EC;min-height:320px">
+        <div style="color:#A0A6B0;font-size:13px;margin-bottom:4px">Good evening.</div>
+        <div style="font-size:28px;font-weight:500;margin-bottom:12px"><span style="color:#E6E8EC">Husk</span><span style="color:#D6C9A8">AI</span></div>
+
+        <!-- Talk card -->
+        <div style="background:#D6C9A8;border-radius:16px;padding:16px;margin-bottom:10px;height:70px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="color:#0E1013;font-size:20px;font-weight:500">Talk</div>
+          <div style="color:#0E1013;opacity:0.7;font-size:11px">Start a conversation</div>
+        </div>
+
+        <!-- Notes card with inline preview -->
+        <div style="background:#1B1F24;border:1px solid #2C313A;border-radius:16px;padding:14px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="color:#E6E8EC;font-size:15px;font-weight:500">📝 Notes</div>
+            <div style="color:#A0A6B0;font-size:10px;background:#22272D;padding:2px 6px;border-radius:6px">🔍</div>
+          </div>
+          <!-- Recent notes preview -->
+          <div style="background:#15181C;border-radius:8px;padding:8px;margin-bottom:4px">
+            <div style="color:#A0A6B0;font-size:10px;margin-bottom:2px">Today • #architecture</div>
+            <div style="color:#E6E8EC;font-size:11px">Maybe use WebSocket for real-time sync...</div>
+          </div>
+          <div style="background:#15181C;border-radius:8px;padding:8px">
+            <div style="color:#A0A6B0;font-size:10px;margin-bottom:2px">Yesterday • #ui</div>
+            <div style="color:#E6E8EC;font-size:11px">Card swipe gesture for note navigation</div>
+          </div>
+        </div>
+
+        <!-- Secondary grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:#15181C;border:1px solid #2C313A;border-radius:12px;padding:10px;height:55px"><div style="color:#A0A6B0;font-size:10px">Tinker</div></div>
+          <div style="background:#15181C;border:1px solid #2C313A;border-radius:12px;padding:10px;height:55px"><div style="color:#A0A6B0;font-size:10px">Look</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Full-width with note preview</h3>
+      <p>Full-width card between Talk and secondary grid, but taller — shows your most recent notes as a preview. Search icon in header. Tap to open full notes chat.</p>
+    </div>
+  </div>
+</div>

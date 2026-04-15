@@ -34,16 +34,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeScreen
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeViewModel
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.mcp.McpToolBridge
+import com.google.ai.edge.gallery.data.memory.HotMemoryStore
+import com.google.ai.edge.gallery.data.memory.MemoryRepository
+import com.google.ai.edge.gallery.data.memory.MemoryToolSet
+import com.google.ai.edge.gallery.data.rag.RagDao
+import com.google.ai.edge.gallery.data.rag.RagManager
+import com.google.ai.edge.gallery.data.rag.RagToolSet
 import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.theme.emptyStateContent
 import com.google.ai.edge.gallery.ui.theme.emptyStateTitle
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.tool
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -55,21 +68,52 @@ import kotlinx.coroutines.CoroutineScope
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // AI Chat.
 
-class LlmChatTask @Inject constructor() : CustomTask {
+class LlmChatTask(
+  private val hotMemoryStore: HotMemoryStore,
+  private val memoryRepository: MemoryRepository,
+  private val mcpToolBridge: McpToolBridge,
+  private val ragManager: RagManager,
+  private val ragDao: RagDao,
+) : CustomTask {
+  private val memoryToolSet = MemoryToolSet(hotMemoryStore, memoryRepository)
+  private val ragToolSet = RagToolSet(ragManager, ragDao)
+
   override val task: Task =
     Task(
       id = BuiltInTaskId.LLM_CHAT,
-      label = "AI Chat",
+      label = "Talk",
       category = Category.LLM,
       icon = Icons.Outlined.Forum,
       models = mutableListOf(),
-      description = "Chat with on-device large language models",
-      shortDescription = "Chat with an on-device LLM",
+      description = "Talk to Husk on-device",
+      shortDescription = "Start a conversation",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
         "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",
       textInputPlaceHolderRes = R.string.text_input_placeholder_llm_chat,
     )
+
+  private fun buildSystemInstruction(): Contents? {
+    val memoryBlock = hotMemoryStore.serializeForSystemPrompt() ?: return null
+    val systemPrompt = buildString {
+      appendLine(memoryBlock)
+      appendLine()
+      appendLine("You have memory tools available. Use them proactively:")
+      appendLine("- L1 (hot): promoteToL1, demoteFromL1, updateL1, listL1 — always-visible context.")
+      appendLine("- L2 (long-term): searchMemory, saveMemory, updateMemory, deleteMemory, listMemories — deep knowledge store.")
+      appendLine("- L3 (external): listMcpServers, listMcpTools, mcpTool — reach external tools via MCP.")
+      appendLine("- When you learn important info, save it with saveMemory. Promote only the most critical to L1.")
+      appendLine("- Before asking the user for info, search L2 first — you may already know the answer.")
+      appendLine("- When you need live external data (GitHub, web, etc.), use mcpTool to fetch it.")
+      appendLine("- RAG Knowledge Base: searchDocuments, listDocuments, knowledgeBaseStatus — search user's uploaded documents.")
+      appendLine("- IMPORTANT: When the user asks ANY question that could be answered from their documents, ALWAYS call searchDocuments FIRST before responding. Use the retrieved passages to ground your answer. Cite which document the information came from.")
+      appendLine()
+      appendLine("Formatting rules:")
+      appendLine("- Do NOT use LaTeX notation ($, \\sin, \\times, etc.). Use plain text and Unicode symbols instead (×, ÷, √, π).")
+      appendLine("- Use Markdown for formatting (bold, code blocks, lists).")
+    }
+    return Contents.of(listOf(Content.Text(systemPrompt)))
+  }
 
   override fun initializeModelFn(
     context: Context,
@@ -83,6 +127,9 @@ class LlmChatTask @Inject constructor() : CustomTask {
       supportImage = false,
       supportAudio = false,
       onDone = onDone,
+      systemInstruction = buildSystemInstruction(),
+      tools = listOf(tool(memoryToolSet), tool(mcpToolBridge), tool(ragToolSet)),
+      enableConversationConstrainedDecoding = true,
       coroutineScope = coroutineScope,
     )
   }
@@ -99,9 +146,21 @@ class LlmChatTask @Inject constructor() : CustomTask {
   @Composable
   override fun MainScreen(data: Any) {
     val myData = data as CustomTaskDataForBuiltinTask
+    val viewModel: LlmChatViewModel = hiltViewModel()
+    viewModel.ragManager = ragManager
     LlmChatScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
+      viewModel = viewModel,
+      onResetSessionClickedOverride = { resetTask, model ->
+        viewModel.resetSession(
+          task = resetTask,
+          model = model,
+          systemInstruction = buildSystemInstruction(),
+          tools = listOf(tool(memoryToolSet), tool(mcpToolBridge), tool(ragToolSet)),
+          enableConversationConstrainedDecoding = true,
+        )
+      },
       emptyStateComposable = {
         Box(modifier = Modifier.fillMaxSize()) {
           Column(
@@ -125,12 +184,18 @@ class LlmChatTask @Inject constructor() : CustomTask {
 }
 
 @Module
-@InstallIn(SingletonComponent::class) // Or another component that fits your scope
+@InstallIn(SingletonComponent::class)
 internal object LlmChatTaskModule {
   @Provides
   @IntoSet
-  fun provideTask(): CustomTask {
-    return LlmChatTask()
+  fun provideTask(
+    hotMemoryStore: HotMemoryStore,
+    memoryRepository: MemoryRepository,
+    mcpToolBridge: McpToolBridge,
+    ragManager: RagManager,
+    ragDao: RagDao,
+  ): CustomTask {
+    return LlmChatTask(hotMemoryStore, memoryRepository, mcpToolBridge, ragManager, ragDao)
   }
 }
 
@@ -141,12 +206,12 @@ class LlmAskImageTask @Inject constructor() : CustomTask {
   override val task: Task =
     Task(
       id = BuiltInTaskId.LLM_ASK_IMAGE,
-      label = "Ask Image",
+      label = "Look",
       category = Category.LLM,
       icon = Icons.Outlined.Mms,
       models = mutableListOf(),
-      description = "Ask questions about images with on-device large language models",
-      shortDescription = "Ask questions about images",
+      description = "Show Husk an image and ask about it",
+      shortDescription = "Ask Husk about an image",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
         "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",
@@ -209,9 +274,8 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
       category = Category.LLM,
       icon = Icons.Outlined.Mic,
       models = mutableListOf(),
-      description =
-        "Instantly transcribe and/or translate audio clips using on-device large language models",
-      shortDescription = "Transcribe and translate audio",
+      description = "Transcribe audio and video files with speaker identification",
+      shortDescription = "Transcribe with speaker ID",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
         "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",
@@ -246,7 +310,9 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
   @Composable
   override fun MainScreen(data: Any) {
     val myData = data as CustomTaskDataForBuiltinTask
-    LlmAskAudioScreen(
+    val audioScribeViewModel: AudioScribeViewModel = hiltViewModel()
+    AudioScribeScreen(
+      viewModel = audioScribeViewModel,
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
     )

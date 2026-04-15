@@ -23,6 +23,8 @@ import com.google.ai.edge.gallery.proto.BenchmarkResults
 import com.google.ai.edge.gallery.proto.Cutout
 import com.google.ai.edge.gallery.proto.CutoutCollection
 import com.google.ai.edge.gallery.proto.ImportedModel
+import com.google.ai.edge.gallery.proto.ChatDensity
+import com.google.ai.edge.gallery.proto.FontScale
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.Skill
 import com.google.ai.edge.gallery.proto.Skills
@@ -109,6 +111,32 @@ interface DataStoreRepository {
 
   /** Returns whether a promo with the specified ID has been viewed. */
   fun hasViewedPromo(promoId: String): Boolean
+
+  // Appearance preferences.
+  fun saveAmoledMode(enabled: Boolean)
+  fun readAmoledMode(): Boolean
+  fun saveAccentColor(argb: Int)
+  fun readAccentColor(): Int
+  fun saveFontScale(scale: FontScale)
+  fun readFontScale(): FontScale
+  fun saveChatDensity(density: ChatDensity)
+  fun readChatDensity(): ChatDensity
+
+  // RAG settings (in-memory until proto schema update).
+  fun getRagAutoRetrieve(): Boolean
+  fun setRagAutoRetrieve(enabled: Boolean)
+
+  // Notes brainstorm settings.
+  fun readNotesE2bSystemPrompt(): String
+  fun saveNotesE2bSystemPrompt(prompt: String)
+  fun readNotesE4bSystemPrompt(): String
+  fun saveNotesE4bSystemPrompt(prompt: String)
+  fun readNotesSelectedModel(): String
+  fun saveNotesSelectedModel(modelKey: String)
+
+  // Audio Scribe / Whisper settings.
+  fun readWhisperSelectedModel(): String
+  fun saveWhisperSelectedModel(modelKey: String)
 }
 
 /** Repository for managing data using Proto DataStore. */
@@ -431,6 +459,111 @@ class DefaultDataStoreRepository(
     return runBlocking {
       val settings = dataStore.data.first()
       settings.viewedPromoIdList.contains(promoId)
+    }
+  }
+
+  override fun saveAmoledMode(enabled: Boolean) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setAmoledMode(enabled).build() }
+    }
+  }
+
+  override fun readAmoledMode(): Boolean {
+    return runBlocking { dataStore.data.first().amoledMode }
+  }
+
+  override fun saveAccentColor(argb: Int) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setAccentColorArgb(argb).build() }
+    }
+  }
+
+  override fun readAccentColor(): Int {
+    return runBlocking { dataStore.data.first().accentColorArgb }
+  }
+
+  override fun saveFontScale(scale: FontScale) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setFontScale(scale).build() }
+    }
+  }
+
+  override fun readFontScale(): FontScale {
+    val raw = runBlocking { dataStore.data.first().fontScale }
+    return if (raw == FontScale.FONT_SCALE_UNSPECIFIED) FontScale.FONT_SCALE_DEFAULT else raw
+  }
+
+  override fun saveChatDensity(density: ChatDensity) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setChatDensity(density).build() }
+    }
+  }
+
+  override fun readChatDensity(): ChatDensity {
+    val raw = runBlocking { dataStore.data.first().chatDensity }
+    return if (raw == ChatDensity.CHAT_DENSITY_UNSPECIFIED) ChatDensity.CHAT_DENSITY_COMFORTABLE else raw
+  }
+
+  // RAG settings — stored in-memory for now. Will be persisted via proto in a future update.
+  private var ragAutoRetrieve: Boolean = true
+
+  override fun getRagAutoRetrieve(): Boolean = ragAutoRetrieve
+
+  override fun setRagAutoRetrieve(enabled: Boolean) {
+    ragAutoRetrieve = enabled
+  }
+
+  // ---- Notes brainstorm settings ----
+
+  override fun readNotesE2bSystemPrompt(): String {
+    val stored = runBlocking { dataStore.data.first().notesE2BSystemPrompt }
+    return stored.ifBlank { com.google.ai.edge.gallery.data.notes.NotesDefaults.DEFAULT_E2B_SYSTEM_PROMPT }
+  }
+
+  override fun saveNotesE2bSystemPrompt(prompt: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setNotesE2BSystemPrompt(prompt).build()
+      }
+    }
+  }
+
+  override fun readNotesE4bSystemPrompt(): String {
+    val stored = runBlocking { dataStore.data.first().notesE4BSystemPrompt }
+    return stored.ifBlank { com.google.ai.edge.gallery.data.notes.NotesDefaults.DEFAULT_E4B_SYSTEM_PROMPT }
+  }
+
+  override fun saveNotesE4bSystemPrompt(prompt: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setNotesE4BSystemPrompt(prompt).build()
+      }
+    }
+  }
+
+  override fun readNotesSelectedModel(): String {
+    val stored = runBlocking { dataStore.data.first().notesSelectedModel }
+    return stored.ifBlank { com.google.ai.edge.gallery.data.notes.NotesDefaults.DEFAULT_MODEL }
+  }
+
+  override fun saveNotesSelectedModel(modelKey: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setNotesSelectedModel(modelKey).build()
+      }
+    }
+  }
+
+  override fun readWhisperSelectedModel(): String {
+    val stored = runBlocking { dataStore.data.first().whisperSelectedModel }
+    return stored.ifBlank { "base" }
+  }
+
+  override fun saveWhisperSelectedModel(modelKey: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setWhisperSelectedModel(modelKey).build()
+      }
     }
   }
 }

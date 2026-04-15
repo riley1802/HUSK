@@ -16,6 +16,8 @@
 
 package com.google.ai.edge.gallery.ui.navigation
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -29,12 +31,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -72,7 +70,10 @@ import androidx.navigation.navArgument
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
+import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeScreen
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeViewModel
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.isLegacyTasks
 import com.google.ai.edge.gallery.firebaseAnalytics
@@ -81,13 +82,15 @@ import com.google.ai.edge.gallery.ui.common.ErrorDialog
 import com.google.ai.edge.gallery.ui.common.ModelPageAppBar
 import com.google.ai.edge.gallery.ui.common.chat.ModelDownloadStatusInfoPanel
 import com.google.ai.edge.gallery.ui.home.HomeScreen
-import com.google.ai.edge.gallery.ui.home.PromoScreenGm4
 import com.google.ai.edge.gallery.ui.modelmanager.GlobalModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.notes.NoteConversationScreen
+import com.google.ai.edge.gallery.ui.notes.NoteConversationViewModel
+import com.google.ai.edge.gallery.ui.notes.NotesListScreen
+import com.google.ai.edge.gallery.ui.notes.NotesViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TAG = "AGGalleryNavGraph"
@@ -96,6 +99,10 @@ private const val ROUTE_MODEL_LIST = "model_list"
 private const val ROUTE_MODEL = "route_model"
 private const val ROUTE_BENCHMARK = "benchmark"
 private const val ROUTE_MODEL_MANAGER = "model_manager"
+private const val ROUTE_KNOWLEDGE_BASE = "knowledge_base"
+private const val ROUTE_NOTES_LIST = "notes_list"
+private const val ROUTE_NOTE_CONVERSATION = "note_conversation"
+private const val ROUTE_AUDIO_SCRIBE = "audio_scribe"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -188,63 +195,32 @@ fun GalleryNavHost(
   ) {
     // Home screen.
     composable(route = ROUTE_HOMESCREEN) {
-      // Create a state to trigger PromoScreen fade in animation.
-      val promoId = "gm4"
       Box(modifier = modifier.fillMaxSize()) {
-        var promoDismissed by remember { mutableStateOf(false) }
-
-        val homeScreenContent: @Composable () -> Unit = {
-          HomeScreen(
-            modelManagerViewModel = modelManagerViewModel,
-            tosViewModel = hiltViewModel(),
-            enableAnimation = enableHomeScreenAnimation,
-            navigateToTaskScreen = { task ->
-              pickedTask = task
+        HomeScreen(
+          modelManagerViewModel = modelManagerViewModel,
+          tosViewModel = hiltViewModel(),
+          notesViewModel = hiltViewModel(),
+          enableAnimation = enableHomeScreenAnimation,
+          navigateToTaskScreen = { task ->
+            pickedTask = task
+            // Audio Scribe has its own dedicated screen — skip model selection entirely.
+            if (task.id == BuiltInTaskId.LLM_ASK_AUDIO) {
+              navController.navigate(ROUTE_AUDIO_SCRIBE)
+            } else {
               enableModelListAnimation = true
               navController.navigate(ROUTE_MODEL_LIST)
-              firebaseAnalytics?.logEvent(
-                GalleryEvent.CAPABILITY_SELECT.id,
-                Bundle().apply { putString("capability_name", task.id) },
-              )
-            },
-            onModelsClicked = { navController.navigate(ROUTE_MODEL_MANAGER) },
-            gm4 = true,
-          )
-        }
-
-        // Show home page directly if promo has been viewed.
-        if (modelManagerViewModel.dataStoreRepository.hasViewedPromo(promoId = promoId)) {
-          homeScreenContent()
-        }
-        // If the promo has not been viewed, show promo screen first.
-        else {
-          AnimatedContent(
-            targetState = promoDismissed,
-            label = "PromoToHome",
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-          ) { dismissed ->
-            if (dismissed) {
-              homeScreenContent()
-            } else {
-              var startAnimation by remember { mutableStateOf(false) }
-              LaunchedEffect(Unit) {
-                delay(0L)
-                startAnimation = true
-              }
-              AnimatedVisibility(
-                visible = startAnimation,
-                enter = scaleIn(initialScale = 1.05f, animationSpec = tween(durationMillis = 1000)),
-              ) {
-                PromoScreenGm4(
-                  onDismiss = {
-                    modelManagerViewModel.dataStoreRepository.addViewedPromoId(promoId = promoId)
-                    promoDismissed = true
-                  }
-                )
-              }
             }
-          }
-        }
+            firebaseAnalytics?.logEvent(
+              GalleryEvent.CAPABILITY_SELECT.id,
+              Bundle().apply { putString("capability_name", task.id) },
+            )
+          },
+          onModelsClicked = { navController.navigate(ROUTE_MODEL_MANAGER) },
+          onKnowledgeBaseClicked = { navController.navigate(ROUTE_KNOWLEDGE_BASE) },
+          onNotesClicked = { navController.navigate(ROUTE_NOTES_LIST) },
+          onNotesSearchClicked = { navController.navigate("$ROUTE_NOTES_LIST?search=true") },
+          onNoteClicked = { noteId -> navController.navigate("$ROUTE_NOTE_CONVERSATION/$noteId") },
+        )
       }
     }
 
@@ -410,6 +386,20 @@ fun GalleryNavHost(
       )
     }
 
+    // Knowledge Base manager page.
+    composable(
+      route = ROUTE_KNOWLEDGE_BASE,
+      enterTransition = { slideUpEnter() },
+      exitTransition = { slideDownExit() },
+    ) {
+      com.google.ai.edge.gallery.ui.knowledgebase.KnowledgeBaseScreen(
+        navigateUp = {
+          enableHomeScreenAnimation = false
+          navController.navigateUp()
+        },
+      )
+    }
+
     // Benchmark creation page.
     composable(
       route = "$ROUTE_BENCHMARK/{modelName}",
@@ -430,9 +420,83 @@ fun GalleryNavHost(
         )
       }
     }
+
+    // Audio Scribe — dedicated screen with its own model management.
+    composable(
+      route = ROUTE_AUDIO_SCRIBE,
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) {
+      val audioScribeViewModel: AudioScribeViewModel = hiltViewModel()
+      AudioScribeScreen(
+        viewModel = audioScribeViewModel,
+        modelManagerViewModel = modelManagerViewModel,
+        navigateUp = {
+          enableHomeScreenAnimation = false
+          navController.navigateUp()
+        },
+      )
+    }
+
+    // Notes list screen.
+    composable(
+      route = "$ROUTE_NOTES_LIST?search={search}",
+      arguments = listOf(navArgument("search") { type = NavType.BoolType; defaultValue = false }),
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) { backStackEntry ->
+      val startWithSearch = backStackEntry.arguments?.getBoolean("search") ?: false
+      val notesViewModel: NotesViewModel = hiltViewModel()
+      NotesListScreen(
+        viewModel = notesViewModel,
+        navigateUp = {
+          enableHomeScreenAnimation = false
+          navController.navigateUp()
+        },
+        navigateToNote = { noteId, targetMessageId ->
+          val route = if (targetMessageId != null) {
+            "$ROUTE_NOTE_CONVERSATION/$noteId?targetMessageId=$targetMessageId"
+          } else {
+            "$ROUTE_NOTE_CONVERSATION/$noteId"
+          }
+          navController.navigate(route)
+        },
+        startWithSearch = startWithSearch,
+      )
+    }
+
+    // Note conversation screen.
+    composable(
+      route = "$ROUTE_NOTE_CONVERSATION/{noteId}?targetMessageId={targetMessageId}",
+      arguments = listOf(
+        navArgument("noteId") { type = NavType.StringType },
+        navArgument("targetMessageId") { type = NavType.StringType; nullable = true; defaultValue = null },
+      ),
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) { backStackEntry ->
+      val noteId = backStackEntry.arguments?.getString("noteId") ?: return@composable
+      val targetMessageId = backStackEntry.arguments?.getString("targetMessageId")
+      val conversationViewModel: NoteConversationViewModel = hiltViewModel()
+
+      // Get the currently loaded model for inference.
+      val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
+      val selectedModel = modelManagerUiState.selectedModel
+
+      NoteConversationScreen(
+        viewModel = conversationViewModel,
+        model = selectedModel,
+        noteId = noteId,
+        targetMessageId = targetMessageId,
+        navigateUp = {
+          navController.navigateUp()
+        },
+      )
+    }
   }
 
-  // Handle incoming intents for deep links
+  // Handle incoming intents for deep links and share actions
+  val context = LocalContext.current
   val intent = androidx.activity.compose.LocalActivity.current?.intent
   val data = intent?.data
   if (data != null) {
@@ -450,6 +514,28 @@ fun GalleryNavHost(
       }
     } else if (data.toString() == "com.google.ai.edge.gallery://global_model_manager") {
       navController.navigate(ROUTE_MODEL_MANAGER)
+    }
+  }
+
+  // Handle incoming SEND intents for RAG document ingestion
+  if (intent?.action == Intent.ACTION_SEND) {
+    val shareUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+    } else {
+      @Suppress("DEPRECATION")
+      intent.getParcelableExtra(Intent.EXTRA_STREAM)
+    }
+    if (shareUri != null) {
+      intent.action = null  // Consume the intent
+      Log.d(TAG, "Share intent received: $shareUri")
+      navController.navigate(ROUTE_KNOWLEDGE_BASE)
+      // Ingestion is handled by the KB screen's file picker or manually
+      // via the ViewModel. For share intents, we navigate to the KB screen.
+      android.widget.Toast.makeText(
+        context,
+        "Document shared — open Knowledge Base to manage",
+        android.widget.Toast.LENGTH_SHORT,
+      ).show()
     }
   }
 }

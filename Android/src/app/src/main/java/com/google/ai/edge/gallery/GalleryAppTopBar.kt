@@ -119,6 +119,9 @@ fun GalleryTopAppBar(
     },
     // The "action" component at the right.
     actions = {
+      // Thermal meter — always visible.
+      com.google.ai.edge.gallery.ui.thermal.ThermalMeterChip()
+
       when (rightAction?.actionType) {
         // Click an icon to open "app setting".
         AppBarActionType.APP_SETTING -> {

@@ -17,75 +17,137 @@
 package com.google.ai.edge.gallery.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.core.graphics.ColorUtils as AndroidColorUtils
 
-val primaryLight = Color(0xFF0B57D0)
-val onPrimaryLight = Color(0xFFFFFFFF)
-val primaryContainerLight = Color(0xFFD3E3FD)
-val onPrimaryContainerLight = Color(0xFF0842A0)
-val secondaryLight = Color(0xFF00639B)
-val onSecondaryLight = Color(0xFFFFFFFF)
-val secondaryContainerLight = Color(0xFFC2E7FF)
-val onSecondaryContainerLight = Color(0xFF004A77)
-val tertiaryLight = Color(0xFF146C2E)
-val onTertiaryLight = Color(0xFFFFFFFF)
-val tertiaryContainerLight = Color(0xFFC4EED0)
-val onTertiaryContainerLight = Color(0xFF0F5223)
-val errorLight = Color(0xFFB3261E)
-val onErrorLight = Color(0xFFFFFFFF)
-val errorContainerLight = Color(0xFFF9DEDC)
-val onErrorContainerLight = Color(0xFF8C1D18)
-val backgroundLight = Color(0xFFFFFFFF)
-val onBackgroundLight = Color(0xFF1F1F1F)
-val surfaceLight = Color(0xFFFFFFFF)
-val onSurfaceLight = Color(0xFF1F1F1F)
-val surfaceVariantLight = Color(0xFFE1E3E1)
-val onSurfaceVariantLight = Color(0xFF444746)
-val surfaceContainerLowestLight = Color(0xFFFFFFFF)
-val surfaceContainerLowLight = Color(0xFFF8FAFD)
-val surfaceContainerLight = Color(0xFFF0F4F9)
-val surfaceContainerHighLight = Color(0xFFE9EEF6)
-val surfaceContainerHighestLight = Color(0xFFDDE3EA)
-val inverseSurfaceLight = Color(0xFF303030)
-val inverseOnSurfaceLight = Color(0xFFF2F2F2)
-val outlineLight = Color(0xFF747775)
-val outlineVariantLight = Color(0xFFC4C7C5)
-val inversePrimaryLight = Color(0xFFA8C7FA)
-val surfaceDimLight = Color(0xFFD3DBE5)
-val surfaceBrightLight = Color(0xFFFFFFFF)
+// Husk palette — cool monochrome dark with a single warm-sand accent.
+val huskBackground = Color(0xFF0E1013)
+val huskSurface = Color(0xFF15181C)
+val huskSurfaceHigh = Color(0xFF1B1F24)
+val huskSurfaceHighest = Color(0xFF22272D)
+val huskOutline = Color(0xFF2C313A)
+val huskOutlineSoft = Color(0xFF1F232A)
+val huskTextPrimary = Color(0xFFE6E8EC)
+val huskTextSecondary = Color(0xFFA0A6B0)
+val huskTextMuted = Color(0xFF6B7280)
+val huskAccent = Color(0xFFD6C9A8)
+val huskAccentMuted = Color(0xFF9C9276)
+val huskOnAccent = Color(0xFF0E1013)
+val huskError = Color(0xFFC97A6E)
+val huskWarning = Color(0xFFC9A86E)
+val huskSuccess = Color(0xFF7E9B7A)
+
+// AMOLED black palette — true black background with proportionally darker surfaces.
+val amoledBackground = Color.Black
+val amoledSurface = Color(0xFF0A0A0A)
+val amoledSurfaceHigh = Color(0xFF121212)
+val amoledSurfaceHighest = Color(0xFF1A1A1A)
+val amoledOutline = Color(0xFF222222)
+val amoledOutlineSoft = Color(0xFF161616)
+
+// Accent color presets — all desaturated/muted to fit the monochrome aesthetic.
+data class AccentPreset(val name: String, val argb: Int, val color: Color)
+
+val accentPresets = listOf(
+	AccentPreset("Sand", 0, huskAccent), // 0 means "use default"
+	AccentPreset("Ice", 0xFFA8C4D6.toInt(), Color(0xFFA8C4D6)),
+	AccentPreset("Teal", 0xFF8CBEB2.toInt(), Color(0xFF8CBEB2)),
+	AccentPreset("Rose", 0xFFC9A0A0.toInt(), Color(0xFFC9A0A0)),
+	AccentPreset("Lavender", 0xFFB0A8C9.toInt(), Color(0xFFB0A8C9)),
+	AccentPreset("Amber", 0xFFC9B07A.toInt(), Color(0xFFC9B07A)),
+	AccentPreset("Sage", 0xFF9BB09A.toInt(), Color(0xFF9BB09A)),
+	AccentPreset("Slate", 0xFFA0A8B0.toInt(), Color(0xFFA0A8B0)),
+)
+
+/** Derive a muted variant of an accent color (reduced saturation + brightness). */
+fun deriveAccentMuted(accent: Color): Color {
+	val hsl = FloatArray(3)
+	AndroidColorUtils.colorToHSL(android.graphics.Color.argb(255, (accent.red * 255).toInt(), (accent.green * 255).toInt(), (accent.blue * 255).toInt()), hsl)
+	hsl[1] = hsl[1] * 0.7f // reduce saturation
+	hsl[2] = hsl[2] * 0.65f // reduce lightness
+	val argb = AndroidColorUtils.HSLToColor(hsl)
+	return Color(argb)
+}
+
+/** Determine whether text on the accent should be light or dark. */
+fun deriveOnAccent(accent: Color): Color {
+	val luminance = AndroidColorUtils.calculateLuminance(
+		android.graphics.Color.argb(255, (accent.red * 255).toInt(), (accent.green * 255).toInt(), (accent.blue * 255).toInt())
+	)
+	return if (luminance > 0.4) huskBackground else huskTextPrimary
+}
+
+// The light palette is retained as a build-time fallback only — Husk runs dark always
+// (see GalleryTheme in Theme.kt). These tokens map to the same Husk values so any stray
+// reference still resolves to a coherent palette instead of a stale Material default.
+val primaryLight = huskAccent
+val onPrimaryLight = huskOnAccent
+val primaryContainerLight = huskSurfaceHigh
+val onPrimaryContainerLight = huskTextPrimary
+val secondaryLight = huskAccentMuted
+val onSecondaryLight = huskOnAccent
+val secondaryContainerLight = huskSurfaceHigh
+val onSecondaryContainerLight = huskTextPrimary
+val tertiaryLight = huskAccent
+val onTertiaryLight = huskOnAccent
+val tertiaryContainerLight = huskSurfaceHigh
+val onTertiaryContainerLight = huskTextPrimary
+val errorLight = huskError
+val onErrorLight = huskOnAccent
+val errorContainerLight = huskSurfaceHigh
+val onErrorContainerLight = huskError
+val backgroundLight = huskBackground
+val onBackgroundLight = huskTextPrimary
+val surfaceLight = huskBackground
+val onSurfaceLight = huskTextPrimary
+val surfaceVariantLight = huskSurfaceHigh
+val onSurfaceVariantLight = huskTextSecondary
+val surfaceContainerLowestLight = huskBackground
+val surfaceContainerLowLight = huskSurface
+val surfaceContainerLight = huskSurface
+val surfaceContainerHighLight = huskSurfaceHigh
+val surfaceContainerHighestLight = huskSurfaceHighest
+val inverseSurfaceLight = huskTextPrimary
+val inverseOnSurfaceLight = huskBackground
+val outlineLight = huskOutline
+val outlineVariantLight = huskOutlineSoft
+val inversePrimaryLight = huskAccent
+val surfaceDimLight = huskBackground
+val surfaceBrightLight = huskSurfaceHighest
 val scrimLight = Color(0xFF000000)
 
-val primaryDark = Color(0xFFA8C7FA)
-val onPrimaryDark = Color(0xFF062E6F)
-val primaryContainerDark = Color(0xFF0842A0)
-val onPrimaryContainerDark = Color(0xFFD3E3FD)
-val secondaryDark = Color(0xFF7FCFFF)
-val onSecondaryDark = Color(0xFF003355)
-val secondaryContainerDark = Color(0xFF004A77)
-val onSecondaryContainerDark = Color(0xFFC2E7FF)
-val tertiaryDark = Color(0xFF6DD58C)
-val onTertiaryDark = Color(0xFF0A3818)
-val tertiaryContainerDark = Color(0xFF0F5223)
-val onTertiaryContainerDark = Color(0xFFC4EED0)
-val errorDark = Color(0xFFF2B8B5)
-val onErrorDark = Color(0xFF601410)
-val errorContainerDark = Color(0xFF8C1D18)
-val onErrorContainerDark = Color(0xFFF9DEDC)
-val backgroundDark = Color(0xFF131314)
-val onBackgroundDark = Color(0xFFE3E3E3)
-val surfaceDark = Color(0xFF131314)
-val onSurfaceDark = Color(0xFFE3E3E3)
-val surfaceVariantDark = Color(0xFF444746)
-val onSurfaceVariantDark = Color(0xFFC4C7C5)
-val surfaceContainerLowestDark = Color(0xFF0E0E0E)
-val surfaceContainerLowDark = Color(0xFF1B1B1B)
-val surfaceContainerDark = Color(0xFF1E1F20)
-val surfaceContainerHighDark = Color(0xFF282A2C)
-val surfaceContainerHighestDark = Color(0xFF333537)
-val inverseSurfaceDark = Color(0xFFE3E3E3)
-val inverseOnSurfaceDark = Color(0xFF303030)
-val outlineDark = Color(0xFF8E918F)
-val outlineVariantDark = Color(0xFF444746)
-val inversePrimaryDark = Color(0xFF0B57D0)
-val surfaceDimDark = Color(0xFF131314)
-val surfaceBrightDark = Color(0xFF37393B)
+// Dark palette — the live Husk palette.
+val primaryDark = huskAccent
+val onPrimaryDark = huskOnAccent
+val primaryContainerDark = huskSurfaceHigh
+val onPrimaryContainerDark = huskTextPrimary
+val secondaryDark = huskAccentMuted
+val onSecondaryDark = huskOnAccent
+val secondaryContainerDark = huskSurfaceHigh
+val onSecondaryContainerDark = huskTextPrimary
+val tertiaryDark = huskAccent
+val onTertiaryDark = huskOnAccent
+val tertiaryContainerDark = huskSurfaceHigh
+val onTertiaryContainerDark = huskTextPrimary
+val errorDark = huskError
+val onErrorDark = huskOnAccent
+val errorContainerDark = huskSurfaceHigh
+val onErrorContainerDark = huskError
+val backgroundDark = huskBackground
+val onBackgroundDark = huskTextPrimary
+val surfaceDark = huskBackground
+val onSurfaceDark = huskTextPrimary
+val surfaceVariantDark = huskSurfaceHigh
+val onSurfaceVariantDark = huskTextSecondary
+val surfaceContainerLowestDark = huskBackground
+val surfaceContainerLowDark = huskSurface
+val surfaceContainerDark = huskSurface
+val surfaceContainerHighDark = huskSurfaceHigh
+val surfaceContainerHighestDark = huskSurfaceHighest
+val inverseSurfaceDark = huskTextPrimary
+val inverseOnSurfaceDark = huskBackground
+val outlineDark = huskOutline
+val outlineVariantDark = huskOutlineSoft
+val inversePrimaryDark = huskAccent
+val surfaceDimDark = huskBackground
+val surfaceBrightDark = huskSurfaceHighest
 val scrimDark = Color(0xFF000000)

@@ -46,6 +46,17 @@ android {
     manifestPlaceholders["applicationName"] = "com.google.ai.edge.gallery.GalleryApplication"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    ndk {
+      abiFilters += "arm64-v8a"
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path = file("src/main/cpp/CMakeLists.txt")
+      version = "3.22.1"
+    }
   }
 
   buildTypes {
@@ -136,6 +147,15 @@ dependencies {
   debugImplementation(libs.androidx.ui.test.manifest)
   ksp(libs.moshi.kotlin.codegen)
   implementation(libs.mlkit.genai.prompt)
+  implementation(libs.room.runtime)
+  implementation(libs.room.ktx)
+  ksp(libs.room.compiler)
+  implementation(libs.okhttp)
+  implementation(libs.okhttp.sse)
+  implementation(libs.localagents.rag)
+  implementation(libs.mediapipe.genai)
+  implementation(libs.pdfbox.android)
+  implementation(libs.coroutines.guava)
 }
 
 ksp {

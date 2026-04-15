@@ -18,12 +18,20 @@ package com.google.ai.edge.gallery.ui.llmchat
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.google.ai.edge.gallery.common.AudioDecoder
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.RuntimeType
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.rag.ChunkResult
+import com.google.ai.edge.gallery.data.rag.RagManager
+import com.google.ai.edge.gallery.data.speaker.SpeakerDiarizationEngine
+import com.google.ai.edge.gallery.runtime.WhisperModelHelper
 import com.google.ai.edge.gallery.runtime.runtimeHelper
+import com.google.ai.edge.gallery.ui.audioscribe.TranscriptSegment
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageError
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageLoading
@@ -47,6 +55,13 @@ private const val TAG = "AGLlmChatViewModel"
 
 @OptIn(ExperimentalApi::class)
 open class LlmChatViewModelBase() : ChatViewModel() {
+  /** RAG manager for automatic document retrieval. Set by the task module. */
+  var ragManager: RagManager? = null
+
+  /** Most recent RAG retrieval results, for source attribution. */
+  var lastRagChunks: List<ChunkResult> = emptyList()
+    private set
+
   fun generateResponse(
     model: Model,
     input: String,
@@ -192,6 +207,13 @@ open class LlmChatViewModelBase() : ChatViewModel() {
                     )
                   }
                 }
+                // Attach RAG source attribution to the final message.
+                if (lastRagChunks.isNotEmpty()) {
+                  val lastMsg = getLastMessage(model = model)
+                  if (lastMsg is ChatMessageText && lastMsg.side == ChatSide.AGENT) {
+                    lastMsg.data = lastRagChunks
+                  }
+                }
                 setInProgress(false)
                 onDone()
               }
@@ -213,7 +235,26 @@ open class LlmChatViewModelBase() : ChatViewModel() {
         val enableThinking =
           allowThinking &&
             model.getBooleanConfigValue(key = ConfigKeys.ENABLE_THINKING, defaultValue = false)
-        val extraContext = if (enableThinking) mapOf("enable_thinking" to "true") else null
+        val extraContextMap = mutableMapOf<String, String>()
+        if (enableThinking) extraContextMap["enable_thinking"] = "true"
+
+        // RAG: pre-retrieve for source attribution tracking only.
+        // Context injection is handled by the model calling searchDocuments tool.
+        lastRagChunks = emptyList()
+        val rag = ragManager
+        if (rag != null) {
+          try {
+            val ragResults = rag.retrieve(input)
+            if (ragResults.isNotEmpty()) {
+              lastRagChunks = ragResults
+              Log.d(TAG, "RAG: pre-retrieved ${ragResults.size} chunks for attribution")
+            }
+          } catch (e: Exception) {
+            Log.e(TAG, "RAG pre-retrieval failed", e)
+          }
+        }
+
+        val extraContext = extraContextMap.ifEmpty { null }
 
         model.runtimeHelper.runInference(
           model = model,
@@ -303,6 +344,205 @@ open class LlmChatViewModelBase() : ChatViewModel() {
         onError = onError,
         allowThinking = allowThinking,
       )
+    }
+  }
+
+  /**
+   * Process audio through the Whisper transcription + speaker diarization pipeline.
+   * This is the alternative to [generateResponse] when a Whisper model is active.
+   */
+  /**
+   * Maximum audio duration (10 minutes) for which a Gemma summary is generated.
+   */
+  private val SUMMARY_MAX_DURATION_MS = 10 * 60 * 1000L
+
+  fun processAudioWithWhisper(
+    model: Model,
+    context: Context,
+    audioUri: Uri,
+    diarizationEngine: SpeakerDiarizationEngine?,
+    onDone: () -> Unit = {},
+    onError: (String) -> Unit,
+  ) {
+    viewModelScope.launch(Dispatchers.Default) {
+      setInProgress(true)
+      setPreparing(true)
+
+      try {
+        // Phase 1: Extract audio.
+        addMessage(model = model, message = ChatMessageLoading(extraProgressLabel = "Extracting audio..."))
+        val decoder = AudioDecoder(context)
+        val decoded = decoder.decode(audioUri) { progress ->
+          // Progress callback — could update UI loading text.
+        }
+
+        if (decoded == null) {
+          removeLastMessage(model = model)
+          setInProgress(false)
+          setPreparing(false)
+          onError("Failed to decode audio file")
+          return@launch
+        }
+
+        // Phase 2: Transcribe.
+        replaceLastMessage(
+          model = model,
+          message = ChatMessageLoading(extraProgressLabel = "Transcribing..."),
+          type = ChatMessageType.LOADING,
+        )
+        setPreparing(false)
+
+        val segments = WhisperModelHelper.transcribe(decoded.samples)
+
+        if (segments.isEmpty()) {
+          removeLastMessage(model = model)
+          setInProgress(false)
+          onError("Transcription produced no results")
+          return@launch
+        }
+
+        // Phase 3: Speaker diarization.
+        if (diarizationEngine != null) {
+          replaceLastMessage(
+            model = model,
+            message = ChatMessageLoading(extraProgressLabel = "Identifying speakers..."),
+            type = ChatMessageType.LOADING,
+          )
+
+          val diarized = diarizationEngine.diarize(segments, decoded.samples)
+          val transcriptSegments = diarized.map { ds ->
+            TranscriptSegment(
+              speakerName = ds.speakerName,
+              text = ds.text,
+              startMs = ds.startMs,
+              endMs = ds.endMs,
+              speakerId = ds.speakerId,
+              speakerEmbedding = ds.speakerEmbedding,
+            )
+          }
+
+          removeLastMessage(model = model)
+          addMessage(
+            model = model,
+            message = ChatMessageText(
+              content = TranscriptSegment.toJson(transcriptSegments),
+              side = ChatSide.AGENT,
+            ),
+          )
+
+          // Phase 4: Generate summary if audio is < 10 minutes.
+          if (decoded.durationMs <= SUMMARY_MAX_DURATION_MS) {
+            generateSummaryFromTranscript(model, transcriptSegments)
+          }
+        } else {
+          // No diarization — just show plain transcript.
+          val plainText = segments.joinToString("\n") { seg ->
+            "[${seg.startMs / 1000}s] ${seg.text}"
+          }
+          removeLastMessage(model = model)
+          addMessage(
+            model = model,
+            message = ChatMessageText(
+              content = plainText,
+              side = ChatSide.AGENT,
+            ),
+          )
+
+          // Phase 4: Generate summary if audio is < 10 minutes.
+          if (decoded.durationMs <= SUMMARY_MAX_DURATION_MS) {
+            val simpleSegments = segments.map { seg ->
+              TranscriptSegment(
+                speakerName = "Speaker",
+                text = seg.text,
+                startMs = seg.startMs,
+                endMs = seg.endMs,
+              )
+            }
+            generateSummaryFromTranscript(model, simpleSegments)
+          }
+        }
+
+        setInProgress(false)
+        onDone()
+      } catch (e: Exception) {
+        Log.e(TAG, "Error in Whisper processing", e)
+        removeLastMessage(model = model)
+        setInProgress(false)
+        setPreparing(false)
+        onError("Transcription error: ${e.message}")
+      }
+    }
+  }
+
+  /**
+   * Send transcript to the active LLM (Gemma E4B) for a concise summary.
+   */
+  private suspend fun generateSummaryFromTranscript(
+    model: Model,
+    segments: List<TranscriptSegment>,
+  ) {
+    try {
+      // Only summarize if there's an LLM model available (not a Whisper model).
+      if (model.runtimeType == RuntimeType.WHISPER) {
+        Log.d(TAG, "Skipping summary: active model is Whisper, not an LLM")
+        return
+      }
+
+      val transcriptText = segments.joinToString("\n") { seg ->
+        "${seg.speakerName}: ${seg.text}"
+      }
+
+      val summaryPrompt = "Summarize the following transcript concisely. " +
+        "Highlight key points, decisions, and action items if any.\n\n" +
+        "TRANSCRIPT:\n$transcriptText"
+
+      addMessage(
+        model = model,
+        message = ChatMessageLoading(extraProgressLabel = "Generating summary..."),
+      )
+
+      // Run inference through the LLM.
+      val resultListener: (String, Boolean, String?) -> Unit =
+        { partialResult, done, _ ->
+          if (!partialResult.startsWith("<ctrl")) {
+            val lastMessage = getLastMessage(model = model)
+            if (lastMessage is ChatMessageLoading) {
+              removeLastMessage(model = model)
+              addMessage(
+                model = model,
+                message = ChatMessageText(
+                  content = "**Summary**\n\n$partialResult",
+                  side = ChatSide.AGENT,
+                ),
+              )
+            } else {
+              updateLastTextMessageContentIncrementally(
+                model = model,
+                partialContent = partialResult,
+                latencyMs = if (done) 0f else -1f,
+              )
+            }
+          }
+        }
+
+      val errorListener: (String) -> Unit = { message ->
+        Log.e(TAG, "Summary generation error: $message")
+        if (getLastMessage(model = model) is ChatMessageLoading) {
+          removeLastMessage(model = model)
+        }
+      }
+
+      val cleanUpListener: () -> Unit = {}
+
+      model.runtimeHelper.runInference(
+        model = model,
+        input = summaryPrompt,
+        resultListener = resultListener,
+        cleanUpListener = cleanUpListener,
+        onError = errorListener,
+      )
+    } catch (e: Exception) {
+      Log.e(TAG, "Error generating summary", e)
     }
   }
 

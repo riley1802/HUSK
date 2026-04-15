@@ -4,7 +4,7 @@ description: Show a roulette wheel to allow user to randomly select a restaurant
 metadata:
   require-secret: true
   require-secret-description: you can get api key from https://ai.google.dev/gemini-api/docs/api-key
-  homepage: https://github.com/google-ai-edge/gallery/tree/main/skills/featured/restaurant-roulette
+  homepage: https://github.com/riley1802/HUSK/tree/main/skills/featured/restaurant-roulette
 ---
 
 # Restaurant Roulette

@@ -4,7 +4,7 @@ description: A skill to suggest or play music based on the user's mood, includin
 metadata:
   require-secret: true
   require-secret-description: you can get api key from https://www.loudly.com/developers/apps after registering an account
-  homepage: https://github.com/google-ai-edge/gallery/tree/main/skills/featured/mood-music
+  homepage: https://github.com/riley1802/HUSK/tree/main/skills/featured/mood-music
 ---
 
 # Mood Music

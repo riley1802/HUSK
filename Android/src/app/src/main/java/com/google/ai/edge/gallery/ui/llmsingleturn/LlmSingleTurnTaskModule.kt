@@ -40,12 +40,12 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
   override val task: Task =
     Task(
       id = BuiltInTaskId.LLM_PROMPT_LAB,
-      label = "Prompt Lab",
+      label = "Tinker",
       category = Category.LLM,
       icon = Icons.Outlined.Widgets,
       models = mutableListOf(),
-      description = "Single turn use cases with on-device large language models",
-      shortDescription = "Single turn use cases",
+      description = "One-shot prompts: rewrite, summarize, classify, and explore",
+      shortDescription = "One-shot prompt playground",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
         "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",

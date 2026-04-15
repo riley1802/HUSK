@@ -17,8 +17,25 @@
 package com.google.ai.edge.gallery.ui.theme
 
 import androidx.compose.runtime.mutableStateOf
+import com.google.ai.edge.gallery.data.DataStoreRepository
+import com.google.ai.edge.gallery.proto.ChatDensity
+import com.google.ai.edge.gallery.proto.FontScale
 import com.google.ai.edge.gallery.proto.Theme
 
+// Husk is dark-only. The override stays a MutableState so existing call sites that
+// observe it still recompose correctly, but its value is fixed to THEME_DARK.
+// Appearance preferences are loaded from DataStore on startup and drive live recomposition.
 object ThemeSettings {
-  val themeOverride = mutableStateOf<Theme>(Theme.THEME_AUTO)
+	val themeOverride = mutableStateOf<Theme>(Theme.THEME_DARK)
+	val amoledMode = mutableStateOf(false)
+	val accentColorArgb = mutableStateOf(0) // 0 = default sand accent
+	val fontScale = mutableStateOf(FontScale.FONT_SCALE_DEFAULT)
+	val chatDensity = mutableStateOf(ChatDensity.CHAT_DENSITY_COMFORTABLE)
+
+	fun loadFrom(repo: DataStoreRepository) {
+		amoledMode.value = repo.readAmoledMode()
+		accentColorArgb.value = repo.readAccentColor()
+		fontScale.value = repo.readFontScale()
+		chatDensity.value = repo.readChatDensity()
+	}
 }

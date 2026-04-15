@@ -2,7 +2,7 @@
 name: virtual-piano
 description: Show a virtual piano to play music
 metadata:
-  homepage: https://github.com/google-ai-edge/gallery/tree/main/skills/featured/virtual-piano
+  homepage: https://github.com/riley1802/HUSK/tree/main/skills/featured/virtual-piano
 ---
 
 # Virtual Piano

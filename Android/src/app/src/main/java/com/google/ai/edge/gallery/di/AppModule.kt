@@ -25,6 +25,8 @@ import com.google.ai.edge.gallery.AppLifecycleProvider
 import com.google.ai.edge.gallery.BenchmarkResultsSerializer
 import com.google.ai.edge.gallery.CutoutsSerializer
 import com.google.ai.edge.gallery.GalleryLifecycleProvider
+import com.google.ai.edge.gallery.HotMemorySerializer
+import com.google.ai.edge.gallery.McpServerRegistrySerializer
 import com.google.ai.edge.gallery.SettingsSerializer
 import com.google.ai.edge.gallery.SkillsSerializer
 import com.google.ai.edge.gallery.UserDataSerializer
@@ -32,11 +34,34 @@ import com.google.ai.edge.gallery.data.DataStoreRepository
 import com.google.ai.edge.gallery.data.DefaultDataStoreRepository
 import com.google.ai.edge.gallery.data.DefaultDownloadRepository
 import com.google.ai.edge.gallery.data.DownloadRepository
+import com.google.ai.edge.gallery.data.memory.HotMemoryStore
+import com.google.ai.edge.gallery.data.memory.MemoryDao
+import com.google.ai.edge.gallery.data.memory.MemoryDatabase
+import com.google.ai.edge.gallery.data.rag.RagDao
+import com.google.ai.edge.gallery.data.rag.RagDatabase
+import com.google.ai.edge.gallery.data.rag.RagManager
+import com.google.ai.edge.gallery.data.rag.embedding.EmbeddingModelManager
+import com.google.ai.edge.gallery.data.mcp.McpManager
+import com.google.ai.edge.gallery.data.mcp.McpToolBridge
+import com.google.ai.edge.gallery.data.mcp.McpTransport
+import com.google.ai.edge.gallery.data.mcp.transports.HttpTransport
+import com.google.ai.edge.gallery.data.memory.MemoryRepository
+import com.google.ai.edge.gallery.data.notes.NotesDao
+import com.google.ai.edge.gallery.data.notes.NotesDatabase
+import com.google.ai.edge.gallery.data.notes.NotesRepository
+import com.google.ai.edge.gallery.data.speaker.SpeakerDatabase
+import com.google.ai.edge.gallery.data.speaker.SpeakerDiarizationEngine
+import com.google.ai.edge.gallery.data.speaker.SpeakerEmbeddingManager
+import com.google.ai.edge.gallery.data.speaker.SpeakerProfileDao
+import com.google.ai.edge.gallery.data.speaker.TranscriptionDao
 import com.google.ai.edge.gallery.proto.BenchmarkResults
+import com.google.ai.edge.gallery.proto.McpServerRegistry
 import com.google.ai.edge.gallery.proto.CutoutCollection
+import com.google.ai.edge.gallery.proto.HotMemory
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.Skills
 import com.google.ai.edge.gallery.proto.UserData
+import androidx.room.Room
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -81,6 +106,13 @@ internal object AppModule {
   @Singleton
   fun provideSkillsSerializer(): Serializer<Skills> {
     return SkillsSerializer
+  }
+
+  // Provides the HotMemorySerializer
+  @Provides
+  @Singleton
+  fun provideHotMemorySerializer(): Serializer<HotMemory> {
+    return HotMemorySerializer
   }
 
   // Provides DataStore<Settings>
@@ -146,6 +178,220 @@ internal object AppModule {
       serializer = skillsSerializer,
       produceFile = { context.dataStoreFile("skills.pb") },
     )
+  }
+
+  // Provides DataStore<HotMemory>
+  @Provides
+  @Singleton
+  fun provideHotMemoryDataStore(
+    @ApplicationContext context: Context,
+    hotMemorySerializer: Serializer<HotMemory>,
+  ): DataStore<HotMemory> {
+    return DataStoreFactory.create(
+      serializer = hotMemorySerializer,
+      produceFile = { context.dataStoreFile("hot_memory.pb") },
+    )
+  }
+
+  // Provides HotMemoryStore
+  @Provides
+  @Singleton
+  fun provideHotMemoryStore(
+    hotMemoryDataStore: DataStore<HotMemory>,
+  ): HotMemoryStore {
+    return HotMemoryStore(hotMemoryDataStore)
+  }
+
+  // Provides MemoryDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideMemoryDatabase(
+    @ApplicationContext context: Context,
+  ): MemoryDatabase {
+    return Room.databaseBuilder(
+      context,
+      MemoryDatabase::class.java,
+      "husk_memory.db",
+    ).build()
+  }
+
+  // Provides MemoryDao
+  @Provides
+  @Singleton
+  fun provideMemoryDao(
+    database: MemoryDatabase,
+  ): MemoryDao {
+    return database.memoryDao()
+  }
+
+  // Provides MemoryRepository
+  @Provides
+  @Singleton
+  fun provideMemoryRepository(
+    memoryDao: MemoryDao,
+  ): MemoryRepository {
+    return MemoryRepository(memoryDao)
+  }
+
+  // ---- Notes Platform ----
+
+  // Provides NotesDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideNotesDatabase(
+    @ApplicationContext context: Context,
+  ): NotesDatabase {
+    return Room.databaseBuilder(
+      context,
+      NotesDatabase::class.java,
+      "husk_notes.db",
+    ).build()
+  }
+
+  // Provides NotesDao
+  @Provides
+  @Singleton
+  fun provideNotesDao(
+    database: NotesDatabase,
+  ): NotesDao {
+    return database.notesDao()
+  }
+
+  // Provides NotesRepository
+  @Provides
+  @Singleton
+  fun provideNotesRepository(
+    notesDao: NotesDao,
+    ragManager: RagManager,
+  ): NotesRepository {
+    return NotesRepository(notesDao, ragManager)
+  }
+
+  // ---- Speaker Diarization ----
+
+  // Provides SpeakerDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideSpeakerDatabase(
+    @ApplicationContext context: Context,
+  ): SpeakerDatabase {
+    return Room.databaseBuilder(
+      context,
+      SpeakerDatabase::class.java,
+      "husk_speakers.db",
+    ).fallbackToDestructiveMigration().build()
+  }
+
+  // Provides SpeakerProfileDao
+  @Provides
+  @Singleton
+  fun provideSpeakerProfileDao(
+    database: SpeakerDatabase,
+  ): SpeakerProfileDao {
+    return database.speakerProfileDao()
+  }
+
+  // Provides TranscriptionDao
+  @Provides
+  @Singleton
+  fun provideTranscriptionDao(
+    database: SpeakerDatabase,
+  ): TranscriptionDao {
+    return database.transcriptionDao()
+  }
+
+  // Provides SpeakerDiarizationEngine
+  @Provides
+  @Singleton
+  fun provideSpeakerDiarizationEngine(
+    embeddingManager: SpeakerEmbeddingManager,
+    speakerProfileDao: SpeakerProfileDao,
+  ): SpeakerDiarizationEngine {
+    return SpeakerDiarizationEngine(embeddingManager, speakerProfileDao)
+  }
+
+  // ---- RAG Platform ----
+
+  // Provides RagDatabase (Room)
+  @Provides
+  @Singleton
+  fun provideRagDatabase(
+    @ApplicationContext context: Context,
+  ): RagDatabase {
+    return Room.databaseBuilder(
+      context,
+      RagDatabase::class.java,
+      "husk_rag.db",
+    ).build()
+  }
+
+  // Provides RagDao
+  @Provides
+  @Singleton
+  fun provideRagDao(
+    database: RagDatabase,
+  ): RagDao {
+    return database.ragDao()
+  }
+
+  // Provides RagManager
+  @Provides
+  @Singleton
+  fun provideRagManager(
+    @ApplicationContext context: Context,
+    ragDao: RagDao,
+    embeddingModelManager: EmbeddingModelManager,
+  ): RagManager {
+    return RagManager(context, ragDao, embeddingModelManager)
+  }
+
+  // ---- MCP Platform ----
+
+  // Provides McpServerRegistrySerializer
+  @Provides
+  @Singleton
+  fun provideMcpRegistrySerializer(): Serializer<McpServerRegistry> {
+    return McpServerRegistrySerializer
+  }
+
+  // Provides DataStore<McpServerRegistry>
+  @Provides
+  @Singleton
+  fun provideMcpRegistryDataStore(
+    @ApplicationContext context: Context,
+    serializer: Serializer<McpServerRegistry>,
+  ): DataStore<McpServerRegistry> {
+    return DataStoreFactory.create(
+      serializer = serializer,
+      produceFile = { context.dataStoreFile("mcp_servers.pb") },
+    )
+  }
+
+  // Provides HttpTransport as McpTransport (via @IntoSet for extensibility)
+  @Provides
+  @Singleton
+  @dagger.multibindings.IntoSet
+  fun provideHttpTransport(): McpTransport {
+    return HttpTransport()
+  }
+
+  // Provides McpManager
+  @Provides
+  @Singleton
+  fun provideMcpManager(
+    registryDataStore: DataStore<McpServerRegistry>,
+    transports: Set<@JvmSuppressWildcards McpTransport>,
+  ): McpManager {
+    return McpManager(registryDataStore, transports)
+  }
+
+  // Provides McpToolBridge
+  @Provides
+  @Singleton
+  fun provideMcpToolBridge(
+    mcpManager: McpManager,
+  ): McpToolBridge {
+    return McpToolBridge(mcpManager)
   }
 
   // Provides AppLifecycleProvider

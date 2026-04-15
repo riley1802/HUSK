@@ -33,6 +33,21 @@ enum Theme {
   THEME_AUTO = 3;
 }
 
+enum FontScale {
+  FONT_SCALE_UNSPECIFIED = 0;
+  FONT_SCALE_SMALL = 1;
+  FONT_SCALE_DEFAULT = 2;
+  FONT_SCALE_LARGE = 3;
+  FONT_SCALE_EXTRA_LARGE = 4;
+}
+
+enum ChatDensity {
+  CHAT_DENSITY_UNSPECIFIED = 0;
+  CHAT_DENSITY_COMPACT = 1;
+  CHAT_DENSITY_COMFORTABLE = 2;
+  CHAT_DENSITY_SPACIOUS = 3;
+}
+
 message AccessTokenData {
   string access_token = 1;
   string refresh_token = 2;
@@ -78,6 +93,21 @@ message Settings {
   // copybara:strip_end
 
   repeated string viewed_promo_id = 10;
+
+  // Appearance preferences.
+  bool amoled_mode = 11;
+  int32 accent_color_argb = 12;  // 0 = use default sand accent
+  FontScale font_scale = 13;
+  ChatDensity chat_density = 14;
+
+  // Notes brainstorm system prompts (user-editable, per model).
+  string notes_e2b_system_prompt = 15;
+  string notes_e4b_system_prompt = 16;
+  // Which model the Notes screen defaults to ("e2b" or "e4b").
+  string notes_selected_model = 17;
+
+  // Which Whisper model to use for Audio Scribe transcription ("tiny", "base", or "small").
+  string whisper_selected_model = 18;
 }
 
 message UserData {
@@ -132,4 +162,48 @@ message Cutout {
 // A collection of cutout, used in scrapbook demo.
 message CutoutCollection {
   repeated Cutout cutout = 1;
+}
+
+// A single entry in the L1 hot memory system.
+message HotMemoryEntry {
+  // Unique key for this memory entry (e.g., "current_project").
+  string key = 1;
+
+  // The content of the memory entry.
+  string content = 2;
+
+  // Category: "project", "event", "fact", or "preference".
+  string category = 3;
+
+  // Timestamp when this entry was created.
+  int64 created_ms = 4;
+
+  // Optional TTL — entry expires after this timestamp. 0 means no expiry.
+  int64 expires_ms = 5;
+
+  // Model-assigned importance (1-10). Higher = more important.
+  int32 priority = 6;
+}
+
+// L1 hot memory — always injected into the system prompt.
+message HotMemory {
+  repeated HotMemoryEntry entries = 1;
+  int64 last_updated_ms = 2;
+}
+
+// Configuration for a single MCP server connection.
+message McpServerConfig {
+  string id = 1;
+  string name = 2;
+  string url = 3;
+  string transport = 4;         // "http", "websocket", or "stdio"
+  string auth_token = 5;        // encrypted via AndroidX Security Crypto
+  bool auto_connect = 6;
+  repeated string enabled_tools = 7;
+  bool read_only = 8;
+}
+
+// Registry of all configured MCP servers.
+message McpServerRegistry {
+  repeated McpServerConfig servers = 1;
 }

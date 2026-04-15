@@ -1,0 +1,79 @@
+<h2>HUSK RAG — Architecture Overview</h2>
+<p class="subtitle">How RAG integrates with the existing 3-layer memory + agent skills architecture</p>
+
+<div class="mockup">
+  <div class="mockup-header">System Architecture</div>
+  <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6; padding: 24px; background: #1a1a2e; color: #e0e0e0;">
+    <pre style="margin:0; white-space: pre; overflow-x: auto;">
+┌─────────────────────────────────────────────────────────────────────┐
+│                         USER INTERFACE                              │
+│  ┌──────────────┐  ┌──────────────────┐  ┌────────────────────┐    │
+│  │  Chat Screen  │  │ Knowledge Base   │  │  Document Import   │    │
+│  │  + Sources    │  │ Manager Screen   │  │  (Picker / Share)  │    │
+│  │  attribution  │  │                  │  │                    │    │
+│  └──────┬───────┘  └────────┬─────────┘  └─────────┬──────────┘    │
+└─────────┼──────────────────┼───────────────────────┼───────────────┘
+          │                  │                       │
+          ▼                  ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      RAG MANAGER (New)                               │
+│  ┌─────────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  Ingestion       │  │  Retrieval    │  │  RagToolSet          │   │
+│  │  Pipeline        │  │  Pipeline     │  │  (LiteRT @Tool)      │   │
+│  │                  │  │              │  │                      │   │
+│  │  File → Parse →  │  │  Query →     │  │  searchDocuments()   │   │
+│  │  Chunk → Embed → │  │  Embed →     │  │  listDocuments()     │   │
+│  │  Store           │  │  Search →    │  │  uploadDocument()    │   │
+│  │                  │  │  Rank →      │  │  removeDocument()    │   │
+│  │                  │  │  Return      │  │                      │   │
+│  └────────┬────────┘  └──────┬───────┘  └──────────┬───────────┘   │
+└───────────┼─────────────────┼──────────────────────┼───────────────┘
+            │                 │                      │
+            ▼                 ▼                      ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  GOOGLE AI EDGE RAG SDK                              │
+│  ┌──────────┐  ┌───────────┐  ┌─────────────────┐  ┌───────────┐  │
+│  │TextChunker│  │ Embedder  │  │SemanticMemory   │  │  Chain    │  │
+│  │          │  │           │  │ (top-k cosine)  │  │           │  │
+│  └──────────┘  └─────┬─────┘  └────────┬────────┘  └───────────┘  │
+│                      │                 │                            │
+│              ┌───────┴─────────────────┴───────┐                   │
+│              │     SqliteVectorStore            │                   │
+│              │  (VectorStore interface)         │                   │
+│              │  Future: ObjectBox swap          │                   │
+│              └─────────────────────────────────┘                   │
+└─────────────────────────────────────────────────────────────────────┘
+            │                                          │
+            ▼                                          ▼
+┌──────────────────────┐              ┌────────────────────────────────┐
+│  EXISTING SYSTEMS    │              │  LiteRT-LM INFERENCE           │
+│                      │              │                                │
+│  L1: HotMemoryStore  │◄────────────│  System Prompt =               │
+│  L2: MemoryRepository│              │    base instructions           │
+│  L3: McpManager      │              │    + L1 hot memory             │
+│  AgentTools          │              │    + RAG context (new)         │
+│                      │              │    + tool definitions           │
+└──────────────────────┘              └────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────┐
+    │  EMBEDDING MODELS (Managed by Model Manager)    │
+    │                                                 │
+    │  Default: Gecko (~30MB, 256d)                   │
+    │  Optional: EmbeddingGemma (~200MB, 128-768d)    │
+    │                                                 │
+    │  Downloaded via existing HF model pipeline      │
+    └─────────────────────────────────────────────────┘</pre>
+  </div>
+</div>
+
+<div style="margin-top: 20px;">
+  <h3>Key Design Decisions</h3>
+  <ul style="line-height: 1.8; color: #ccc;">
+    <li><strong>RAG Manager</strong> is a new layer parallel to the memory system — not inside it</li>
+    <li><strong>RagToolSet</strong> exposes RAG as tools to the LLM, same pattern as MemoryToolSet</li>
+    <li><strong>SqliteVectorStore</strong> behind the VectorStore interface for future ObjectBox swap</li>
+    <li><strong>Embedding models</strong> managed through existing model download infrastructure</li>
+    <li><strong>RAG context injection</strong> goes into system prompt alongside L1 hot memory</li>
+    <li><strong>Collection ID</strong> on documents from day one (all "global" for now, ready for per-conversation later)</li>
+  </ul>
+</div>

@@ -16,14 +16,19 @@
 -->
 
 <resources xmlns:tools="http://schemas.android.com/tools">
-  <style name="Theme.Gallery" parent="android:Theme.Material.Light.NoActionBar" />
-  <style name="Theme.Gallery.SplashScreen" parent="Theme.SplashScreen">
-      <!-- Need to match surfaceLight in Colors.kt -->
-      <item name="windowSplashScreenBackground">#FFFFFFFF</item>
-      <item name="windowSplashScreenAnimatedIcon">@drawable/splash_screen_animated_icon</item>
-      <item name="postSplashScreenTheme">@style/Theme.Gallery</item>
+  <!-- Husk is dark always — both -night and default qualifiers point at the same dark style. -->
+  <style name="Theme.Gallery" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowBackground">#FF0E1013</item>
+    <item name="android:statusBarColor">#FF0E1013</item>
+    <item name="android:navigationBarColor">#FF0E1013</item>
   </style>
-  <style name="Theme.Gallery.OssLicenses" parent="Theme.AppCompat.Light.DarkActionBar">
-      <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
+  <style name="Theme.Gallery.SplashScreen" parent="Theme.SplashScreen">
+    <!-- Matches huskBackground in Color.kt -->
+    <item name="windowSplashScreenBackground">#FF0E1013</item>
+    <item name="windowSplashScreenAnimatedIcon">@drawable/splash_screen_animated_icon</item>
+    <item name="postSplashScreenTheme">@style/Theme.Gallery</item>
+  </style>
+  <style name="Theme.Gallery.OssLicenses" parent="Theme.AppCompat">
+    <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
   </style>
 </resources>

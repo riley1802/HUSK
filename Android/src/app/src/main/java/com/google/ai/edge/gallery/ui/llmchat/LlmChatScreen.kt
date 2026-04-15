@@ -22,11 +22,17 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,6 +40,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.os.bundleOf
+import com.google.ai.edge.gallery.ui.audioscribe.AudioScribeViewModel
+import com.google.ai.edge.gallery.ui.audioscribe.WhisperModelOption
+import com.google.ai.edge.gallery.ui.audioscribe.WhisperModelSelector
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -138,7 +147,19 @@ fun LlmAskAudioScreen(
   navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: LlmAskAudioViewModel = hiltViewModel(),
+  audioScribeViewModel: AudioScribeViewModel = hiltViewModel(),
 ) {
+  val audioScribeState by audioScribeViewModel.uiState.collectAsState()
+
+  // Whisper model options for the selector.
+  val whisperOptions = remember {
+    listOf(
+      WhisperModelOption("tiny", "Tiny", true),
+      WhisperModelOption("base", "Base", true),
+      WhisperModelOption("small", "Small", true),
+    )
+  }
+
   ChatViewWrapper(
     viewModel = viewModel,
     modelManagerViewModel = modelManagerViewModel,
@@ -147,6 +168,16 @@ fun LlmAskAudioScreen(
     modifier = modifier,
     showImagePicker = false,
     showAudioPicker = true,
+    composableBelowMessageList = { _ ->
+      // Whisper model selector panel.
+      WhisperConfigPanel(
+        selectedModel = audioScribeState.selectedWhisperModel,
+        options = whisperOptions,
+        isReady = audioScribeState.whisperModelReady,
+        isInitializing = audioScribeState.isInitializing,
+        onModelSelected = { key -> audioScribeViewModel.selectWhisperModel(key) },
+      )
+    },
     emptyStateComposable = {
       Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -162,10 +193,54 @@ fun LlmAskAudioScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
           )
+
+          Spacer(modifier = Modifier.height(16.dp))
+
+          // Whisper model selector in empty state too.
+          WhisperConfigPanel(
+            selectedModel = audioScribeState.selectedWhisperModel,
+            options = whisperOptions,
+            isReady = audioScribeState.whisperModelReady,
+            isInitializing = audioScribeState.isInitializing,
+            onModelSelected = { key -> audioScribeViewModel.selectWhisperModel(key) },
+          )
         }
       }
     },
   )
+}
+
+@Composable
+private fun WhisperConfigPanel(
+  selectedModel: String,
+  options: List<WhisperModelOption>,
+  isReady: Boolean,
+  isInitializing: Boolean,
+  onModelSelected: (String) -> Unit,
+) {
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    Text(
+      "Whisper Model",
+      style = MaterialTheme.typography.labelSmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    WhisperModelSelector(
+      options = options,
+      selectedKey = selectedModel,
+      onSelected = onModelSelected,
+    )
+    if (isInitializing) {
+      Text(
+        "Loading whisper model...",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+      )
+    }
+  }
 }
 
 @Composable

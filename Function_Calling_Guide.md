@@ -3,7 +3,7 @@ To build specialized agents that go beyond our provided demos, you can fine-tune
 
 ## Clone the Repository
 ```shell
-git clone git@github.com:google-ai-edge/gallery.git
+git clone git@github.com:riley1802/HUSK.git
 ```
 
 This will create a local copy of the repository.
@@ -75,8 +75,8 @@ If your function requires specific context like the current time or device state
 Navigate to the `Android/src/` directory in your terminal and use the Gradle wrapper to build the debug version of the app and install it directly onto your connected device:
 
 ```shell
-cd gallery/Android/src/
+cd HUSK/Android/src/
 ./gradlew installDebug
 ```
 
-Gradle will take care of downloading dependencies, compiling the code, and deploying the APK. Once finished, you should see "Edge Gallery" appearing in your app drawer!
+Gradle will take care of downloading dependencies, compiling the code, and deploying the APK. Once finished, you should see "Husk" appearing in your app drawer!
