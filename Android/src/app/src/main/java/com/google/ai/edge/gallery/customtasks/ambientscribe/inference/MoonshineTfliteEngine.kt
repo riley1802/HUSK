@@ -16,10 +16,9 @@ import android.util.Log
 import com.google.android.gms.tflite.java.TfLite
 import java.io.FileNotFoundException
 import java.io.IOException
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
@@ -30,44 +29,77 @@ import kotlin.coroutines.resumeWithException
 import org.tensorflow.lite.InterpreterApi
 
 /**
- * TranscriptionEngine backed by the Moonshine speech-to-text model running on the
- * Google Play Services TensorFlow Lite runtime (`play-services-tflite-java`).
+ * TranscriptionEngine backed by the Moonshine speech-to-text model running on the Google
+ * Play Services TensorFlow Lite runtime (`play-services-tflite-java`).
  *
- * Moonshine's official TFLite port ships as two graphs:
- *   - `encoder.tflite`    — preprocessor + encoder (raw audio → acoustic features)
- *   - `decoder.tflite`    — autoregressive decoder (features + prev tokens → next token)
- *
- * Plus a SentencePiece tokenizer model (`tokenizer.spm`).
+ * Moonshine's official TFLite port (https://github.com/moonshine-ai/moonshine-tflite) ships
+ * FOUR graphs plus a HuggingFace Tokenizers JSON file:
+ *   - `preprocessor.tfl`   — raw 16 kHz PCM window → log-mel spectrogram features
+ *   - `encoder.tfl`        — features → encoder hidden states
+ *   - `decoder_initial.tfl`— first decoder step (no KV cache inputs, emits initial cache)
+ *   - `decoder.tfl`        — subsequent decoder steps with KV-cache round-tripping
+ *   - `tokenizer.json`     — HuggingFace Tokenizers (NOT SentencePiece) vocabulary
  *
  * Model assets are loaded from:
- *   - `assets/models/moonshine/encoder.tflite`
- *   - `assets/models/moonshine/decoder.tflite`
- *   - `assets/models/moonshine/tokenizer.spm`
+ *   - `assets/models/moonshine/preprocessor.tfl`
+ *   - `assets/models/moonshine/encoder.tfl`
+ *   - `assets/models/moonshine/decoder_initial.tfl`
+ *   - `assets/models/moonshine/decoder.tfl`
+ *   - `assets/models/moonshine/tokenizer.json`
  *
- * If any of these assets are missing, [initialize] logs a warning and leaves [isReady] as
- * false. Callers that invoke [transcribe] on an unready engine receive
- * [EngineNotReadyException].
+ * None of these are bundled in the repo — they're distributed via git-lfs on the upstream
+ * repo and would blow past the 10 MB asset budget even quantized. Users side-load them onto
+ * the device after install. Until all five files exist, [initialize] logs a single warning
+ * and leaves [isReady] as false; callers that invoke [transcribe] on an unready engine
+ * receive [EngineNotReadyException].
+ *
+ * The decode loop itself is intentionally not implemented in this build — see
+ * [decode] for the expected pipeline shape. Because [ready] stays false without the assets,
+ * the decode path is unreachable at runtime.
  */
 class MoonshineTfliteEngine(
 	private val context: Context,
 ) : TranscriptionEngine {
 
 	private val initMutex = Mutex()
+	private val missingAssetsWarningLogged = AtomicBoolean(false)
 
 	@Volatile private var ready: Boolean = false
+	@Volatile private var preprocessor: InterpreterApi? = null
 	@Volatile private var encoder: InterpreterApi? = null
+	@Volatile private var decoderInitial: InterpreterApi? = null
 	@Volatile private var decoder: InterpreterApi? = null
+	@Volatile private var preprocessorModelBuffer: MappedByteBuffer? = null
 	@Volatile private var encoderModelBuffer: MappedByteBuffer? = null
+	@Volatile private var decoderInitialModelBuffer: MappedByteBuffer? = null
 	@Volatile private var decoderModelBuffer: MappedByteBuffer? = null
-	@Volatile private var tokenizerBytes: ByteArray? = null
-
-	/** Reusable 30-second input buffer, allocated on first successful initialize(). */
-	@Volatile private var paddedInputBuffer: ByteBuffer? = null
+	@Volatile private var tokenizerJson: ByteArray? = null
 
 	override suspend fun initialize() {
 		initMutex.withLock {
 			if (ready) return
 
+			val assets = context.assets
+
+			// Check every asset up-front. If any is missing, log once and stay not-ready.
+			val preBuf = tryLoadModel(assets, PREPROCESSOR_ASSET)
+			val encBuf = tryLoadModel(assets, ENCODER_ASSET)
+			val decInitBuf = tryLoadModel(assets, DECODER_INITIAL_ASSET)
+			val decBuf = tryLoadModel(assets, DECODER_ASSET)
+			val tokBytes = tryReadBytes(assets, TOKENIZER_ASSET)
+
+			if (preBuf == null || encBuf == null || decInitBuf == null || decBuf == null || tokBytes == null) {
+				if (missingAssetsWarningLogged.compareAndSet(false, true)) {
+					Log.w(
+						TAG,
+						"Moonshine assets not bundled — transcription disabled until models + " +
+							"tokenizer are side-loaded into app assets",
+					)
+				}
+				return
+			}
+
+			// All assets present — now we need the Play-Services runtime.
 			try {
 				awaitTask()
 			} catch (t: Throwable) {
@@ -75,70 +107,77 @@ class MoonshineTfliteEngine(
 				return
 			}
 
-			val assets = context.assets
-			val encoderBuffer = tryLoadModel(assets, ENCODER_ASSET) ?: run {
-				Log.w(TAG, "Encoder asset '$ENCODER_ASSET' not found; engine remains not-ready")
-				return
-			}
-			val decoderBuffer = tryLoadModel(assets, DECODER_ASSET) ?: run {
-				Log.w(TAG, "Decoder asset '$DECODER_ASSET' not found; engine remains not-ready")
-				return
-			}
-			val tokenizer = tryReadTokenizer(assets) ?: run {
-				Log.w(TAG, "Tokenizer asset '$TOKENIZER_ASSET' not found; engine remains not-ready")
-				return
-			}
-
 			val options = InterpreterApi.Options()
 				.setRuntime(InterpreterApi.Options.TfLiteRuntime.FROM_SYSTEM_ONLY)
 
-			val enc: InterpreterApi = try {
-				InterpreterApi.create(encoderBuffer, options)
+			val createdInterpreters = ArrayList<InterpreterApi>(4)
+			val pre: InterpreterApi = try {
+				InterpreterApi.create(preBuf, options).also { createdInterpreters += it }
 			} catch (t: Throwable) {
+				Log.w(TAG, "Failed to create preprocessor interpreter; engine remains not-ready", t)
+				return
+			}
+			val enc: InterpreterApi = try {
+				InterpreterApi.create(encBuf, options).also { createdInterpreters += it }
+			} catch (t: Throwable) {
+				createdInterpreters.forEach { runCatching { it.close() } }
 				Log.w(TAG, "Failed to create encoder interpreter; engine remains not-ready", t)
 				return
 			}
-			val dec: InterpreterApi = try {
-				InterpreterApi.create(decoderBuffer, options)
+			val decInit: InterpreterApi = try {
+				InterpreterApi.create(decInitBuf, options).also { createdInterpreters += it }
 			} catch (t: Throwable) {
-				enc.close()
-				Log.w(TAG, "Decoder interpreter creation failed; closed encoder, engine remains not-ready", t)
+				createdInterpreters.forEach { runCatching { it.close() } }
+				Log.w(TAG, "Failed to create decoder_initial interpreter; engine remains not-ready", t)
+				return
+			}
+			val dec: InterpreterApi = try {
+				InterpreterApi.create(decBuf, options).also { createdInterpreters += it }
+			} catch (t: Throwable) {
+				createdInterpreters.forEach { runCatching { it.close() } }
+				Log.w(TAG, "Failed to create decoder interpreter; engine remains not-ready", t)
 				return
 			}
 
-			// Only assign to fields after both interpreters succeeded.
-			encoderModelBuffer = encoderBuffer
-			decoderModelBuffer = decoderBuffer
-			tokenizerBytes = tokenizer
+			// Only assign to fields after every interpreter succeeded.
+			preprocessorModelBuffer = preBuf
+			encoderModelBuffer = encBuf
+			decoderInitialModelBuffer = decInitBuf
+			decoderModelBuffer = decBuf
+			tokenizerJson = tokBytes
+			preprocessor = pre
 			encoder = enc
+			decoderInitial = decInit
 			decoder = dec
-			paddedInputBuffer = ByteBuffer
-				.allocateDirect(MAX_SAMPLES * Float.SIZE_BYTES)
-				.order(ByteOrder.nativeOrder())
 			ready = true
-			Log.i(TAG, "Moonshine engine initialized (encoder/decoder/tokenizer loaded)")
+			Log.i(TAG, "Moonshine engine initialized (4 models + tokenizer loaded)")
 		}
 	}
 
 	override suspend fun close() {
 		initMutex.withLock {
 			ready = false
-			try {
-				encoder?.close()
-			} catch (t: Throwable) {
-				Log.w(TAG, "Error closing encoder", t)
+			listOf(
+				"preprocessor" to preprocessor,
+				"encoder" to encoder,
+				"decoder_initial" to decoderInitial,
+				"decoder" to decoder,
+			).forEach { (name, interp) ->
+				try {
+					interp?.close()
+				} catch (t: Throwable) {
+					Log.w(TAG, "Error closing $name", t)
+				}
 			}
-			try {
-				decoder?.close()
-			} catch (t: Throwable) {
-				Log.w(TAG, "Error closing decoder", t)
-			}
+			preprocessor = null
 			encoder = null
+			decoderInitial = null
 			decoder = null
+			preprocessorModelBuffer = null
 			encoderModelBuffer = null
+			decoderInitialModelBuffer = null
 			decoderModelBuffer = null
-			tokenizerBytes = null
-			paddedInputBuffer = null
+			tokenizerJson = null
 		}
 	}
 
@@ -157,84 +196,35 @@ class MoonshineTfliteEngine(
 		}
 
 		return withContext(Dispatchers.Default) {
-			// Readiness gate.
+			// Readiness gate. Without the full 4-model + tokenizer asset set this is always
+			// the path taken; decode() below is unreachable in this build.
 			if (!ready) {
 				throw EngineNotReadyException("Moonshine model not loaded")
 			}
-
-			val paddedBuffer = paddedInputBuffer
-				?: throw EngineNotReadyException("Moonshine model not loaded")
-			val enc = encoder ?: throw EngineNotReadyException("Moonshine model not loaded")
-
-			// Zero-pad to the 30s max-buffer length used by the TFLite port.
-			paddedBuffer.clear()
-			val floatView = paddedBuffer.asFloatBuffer()
-			floatView.put(samples)
-			// Remaining floats are already zero from the fresh ByteBuffer allocation; explicitly
-			// zero them on subsequent calls to avoid leaking previous audio into padding.
-			val remaining = MAX_SAMPLES - samples.size
-			if (remaining > 0) {
-				val zeros = FloatArray(remaining)
-				floatView.put(zeros)
-			}
-			paddedBuffer.rewind()
-
-			val startNs = System.nanoTime()
-
-			// Run the encoder. The real invocation needs the output tensor allocated to the
-			// model's declared shape; we deliberately keep the placeholder in runEncoder() so
-			// it fails loudly once a real model is dropped in but tokenizer integration is
-			// still missing, rather than silently producing bogus data. Any runtime
-			// shape/allocation error propagates to the caller as a fatal engine failure.
-			@Suppress("UNUSED_VARIABLE")
-			val encoderOutputs = runEncoder(enc, paddedBuffer)
-
-			// Decoder loop — pending the Moonshine tokenizer (.spm) integration. Structure is
-			// present so bundling the real tokenizer + running the loop is a drop-in
-			// replacement of `decode()` below. The decoder interpreter null check belongs
-			// inside `decode()` once it is real.
-			val decodedText = decode()
-
-			val durationMs = (System.nanoTime() - startNs) / 1_000_000L
-			TranscriptionResult(
-				text = decodedText,
-				confidence = Float.NaN,
-				durationMs = durationMs,
-			)
+			throw EngineNotReadyException("Moonshine decoder loop not implemented in this build")
 		}
 	}
 
 	/**
-	 * Placeholder for the encoder forward pass. Allocates an output holder matching a
-	 * reasonable acoustic-feature tensor shape; the real shape will be determined once
-	 * the Moonshine TFLite export is bundled. Kept as a stub so the call site exists.
+	 * Moonshine autoregressive decode loop. Intentionally not implemented in this build.
+	 *
+	 * Expected pipeline shape for a future integration:
+	 *   1. preprocessor(samples)           -> features
+	 *   2. encoder(features)               -> encoder_out
+	 *   3. decoder_initial(encoder_out)    -> (logits_0, kv_cache_0)
+	 *   4. loop while token != EOS && len < MAX_TOKENS:
+	 *        decoder(encoder_out, prev_token, kv_cache_n) -> (logits_n+1, kv_cache_n+1)
+	 *        next_token = argmax(logits_n+1)
+	 *   5. HuggingFace Tokenizers (tokenizer.json) decodes the token sequence to text
+	 *
+	 * Not ported in this build because: (a) the 4 TFLite graphs require git-lfs to fetch and
+	 * exceed the 10 MB asset budget even quantized, and (b) Android has no first-party
+	 * HuggingFace Tokenizers runtime — it needs either the Rust tokenizers crate via JNI or
+	 * a pure-Kotlin reimplementation of the BPE pipeline described in tokenizer.json.
 	 */
-	private fun runEncoder(enc: InterpreterApi, input: ByteBuffer): Array<FloatArray> {
-		// TODO(ambient-scribe): wire real encoder output shape once the model is bundled.
-		// Until then, callers never reach this path because isReady() is false without
-		// the model, and tests exercise only the unready / validation paths.
-		val placeholderOut = Array(1) { FloatArray(1) }
-		enc.run(input, placeholderOut)
-		return placeholderOut
-	}
-
-	/**
-	 * Autoregressive decoder loop. Intentionally a scaffold — the real implementation
-	 * requires the Moonshine SentencePiece tokenizer, which is not yet bundled.
-	 */
+	@Suppress("unused")
 	private fun decode(): String {
-		// TODO(ambient-scribe): implement the autoregressive loop once the Moonshine
-		//   tokenizer (`tokenizer.spm`) is bundled and the decoder's I/O tensor shapes
-		//   are wired. Expected structure:
-		//
-		//     val tokens = mutableListOf(BOS_TOKEN_ID)
-		//     while (tokens.last() != EOS_TOKEN_ID && tokens.size < MAX_TOKENS) {
-		//         val logits = runDecoderStep(dec, encoderOutputs, tokens)
-		//         tokens += argmax(logits)
-		//     }
-		//     return sentencePiece.decode(tokens.drop(1).dropLast(1))
-		//
-		throw NotImplementedError("Decoder loop pending Moonshine tokenizer integration")
+		throw EngineNotReadyException("Moonshine decoder loop not implemented in this build")
 	}
 
 	private fun tryLoadModel(assets: AssetManager, path: String): MappedByteBuffer? {
@@ -256,13 +246,13 @@ class MoonshineTfliteEngine(
 		}
 	}
 
-	private fun tryReadTokenizer(assets: AssetManager): ByteArray? {
+	private fun tryReadBytes(assets: AssetManager, path: String): ByteArray? {
 		return try {
-			assets.open(TOKENIZER_ASSET).use { it.readBytes() }
+			assets.open(path).use { it.readBytes() }
 		} catch (e: FileNotFoundException) {
 			null
 		} catch (e: IOException) {
-			Log.w(TAG, "I/O error reading tokenizer asset '$TOKENIZER_ASSET'", e)
+			Log.w(TAG, "I/O error reading asset '$path'", e)
 			null
 		}
 	}
@@ -282,9 +272,11 @@ class MoonshineTfliteEngine(
 	companion object {
 		private const val TAG = "MoonshineTfliteEngine"
 
-		private const val ENCODER_ASSET = "models/moonshine/encoder.tflite"
-		private const val DECODER_ASSET = "models/moonshine/decoder.tflite"
-		private const val TOKENIZER_ASSET = "models/moonshine/tokenizer.spm"
+		private const val PREPROCESSOR_ASSET = "models/moonshine/preprocessor.tfl"
+		private const val ENCODER_ASSET = "models/moonshine/encoder.tfl"
+		private const val DECODER_INITIAL_ASSET = "models/moonshine/decoder_initial.tfl"
+		private const val DECODER_ASSET = "models/moonshine/decoder.tfl"
+		private const val TOKENIZER_ASSET = "models/moonshine/tokenizer.json"
 
 		/** 16kHz * 0.1s. */
 		internal const val MIN_SAMPLES = 1_600
